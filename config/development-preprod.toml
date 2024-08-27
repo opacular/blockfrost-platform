@@ -1,0 +1,7 @@
+[server]
+address = '0.0.0.0:3000'
+log_level = 'info'
+network = 'preprod'
+
+[node]
+endpoint = 'ddmtr_cnode_stable_preprod_1efhxstw7lvzyccgmm69.cnode-m1.demeter.run'

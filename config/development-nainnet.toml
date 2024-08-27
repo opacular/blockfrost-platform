@@ -1,0 +1,7 @@
+[server]
+address = '0.0.0.0:3000'
+log_level = 'info'
+network = 'preview'
+
+[node]
+endpoint = 'dmtr_cnode_edge_mainnet_1vpdrs5ceffglcsygfel.cnode-m1.demeter.run'
