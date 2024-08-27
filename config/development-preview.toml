@@ -4,4 +4,4 @@ log_level = 'info'
 network = 'preview'
 
 [node]
-endpoint = 'dmtr_cnode_stable_preview_1ale8v8gznd07q4mlfzg.cnode-m1.demeter.run'
+endpoint = 'relays-new.cardano-preview.iohk.io:3001'

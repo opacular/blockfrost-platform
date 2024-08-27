@@ -4,4 +4,4 @@ log_level = 'info'
 network = 'mainnet'
 
 [node]
-endpoint = 'relays-new.cardano-preprod.iohk.io:3001'
+endpoint = 'relays-new.cardano-mainnet.iohk.io:3001'
