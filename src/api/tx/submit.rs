@@ -1,19 +1,15 @@
-use axum::Json;
-use serde::Serialize;
+use crate::{common::validate_content_type, errors::BlockfrostError, node::Node};
+use axum::{body::Bytes, http::HeaderMap, response::IntoResponse, Extension};
+use std::sync::Arc;
 
-#[derive(Serialize)]
-pub struct Response {
-    pub name: String,
-    pub version: String,
-    pub healthy: bool,
-}
+pub async fn route(
+    Extension(node): Extension<Arc<Node>>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Result<impl IntoResponse, BlockfrostError> {
+    validate_content_type(&headers, &["application/cbor"])?;
 
-pub async fn route() -> Json<Response> {
-    let response = Response {
-        name: "blockfrost-instance".to_string(),
-        version: env!("CARGO_PKG_VERSION").to_string(),
-        healthy: true,
-    };
+    let response = node.submit_transaction(body.to_vec()).await?;
 
-    Json(response)
+    Ok(response)
 }

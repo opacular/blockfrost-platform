@@ -21,9 +21,6 @@ pub enum ConfigError {
     #[error("Config file is invalid: {0}")]
     InvalidConfig(String),
 
-    #[error("Missing field `{0}` in configuration")]
-    MissingField(String),
-
     #[error("Failed to read config file: {0}")]
     ReadError(#[from] std::io::Error),
 
