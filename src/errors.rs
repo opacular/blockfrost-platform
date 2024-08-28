@@ -3,6 +3,19 @@ use axum::{http, Json};
 use http::StatusCode;
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum AppError {
+    #[error("Configuration error: {0}")]
+    ConfigError(String),
+
+    #[error("Node connection error: {0}")]
+    NodeError(String),
+
+    #[error("Server startup error: {0}")]
+    ServerError(String),
+}
 
 /// Our custom error type.
 /// It has three fields:

@@ -1,10 +1,9 @@
 mod api;
+mod common;
 mod config;
 mod errors;
 mod middlewares;
 mod node;
-
-use std::sync::Arc;
 
 use api::root;
 use api::tx;
@@ -16,21 +15,18 @@ use axum::{Router, ServiceExt};
 use clap::Parser;
 use colored::Colorize;
 use config::Args;
+use errors::AppError;
 use errors::BlockfrostError;
 use middlewares::errors::error_middleware;
+use std::sync::Arc;
 use tower::ServiceBuilder;
 use tower_http::normalize_path::NormalizePathLayer;
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), AppError> {
     let arguments = Args::parse();
-    let config = match config::load_config(arguments.config) {
-        Ok(config) => config,
-        Err(e) => {
-            eprintln!("\nError loading configuration: {}\n", e);
-            panic!();
-        }
-    };
+    let config =
+        config::load_config(arguments.config).map_err(|e| AppError::ConfigError(e.to_string()))?;
 
     tracing_subscriber::fmt()
         .with_max_level(config.server.log_level)
@@ -38,14 +34,12 @@ async fn main() {
 
     let node = node::Node::new(&config.node.endpoint, config.server.network_magic)
         .await
-        .expect("Failed to connect to the node");
-
-    let shared_node = Arc::new(node);
+        .map_err(|e| AppError::NodeError(e.to_string()))?;
 
     let app = Router::new()
         .route("/", get(root::route))
         .route("/tx/submit", post(tx::submit::route))
-        .layer(Extension(shared_node))
+        .layer(Extension(Arc::new(node)))
         .layer(from_fn(error_middleware))
         .fallback(BlockfrostError::not_found());
 
@@ -70,5 +64,7 @@ async fn main() {
 
     axum::serve(listener, ServiceExt::<Request>::into_make_service(app))
         .await
-        .expect("Failed to start the server");
+        .map_err(|e| AppError::ServerError(e.to_string()))?;
+
+    Ok(())
 }
