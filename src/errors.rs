@@ -1,7 +1,9 @@
 use axum::response::{IntoResponse, Response};
 use axum::{http, Json};
 use http::StatusCode;
+use pallas_network::facades::Error as PeerClientError;
 use serde::{Deserialize, Serialize};
+use std::array::TryFromSliceError;
 use std::fmt;
 use thiserror::Error;
 
@@ -41,9 +43,21 @@ impl From<serde_json::Error> for BlockfrostError {
     }
 }
 
-impl From<reqwest::Error> for BlockfrostError {
-    fn from(err: reqwest::Error) -> Self {
-        Self::internal_server_error(format!("ReqwestError: {}", err))
+impl From<pallas_network::miniprotocols::txsubmission::Error> for BlockfrostError {
+    fn from(err: pallas_network::miniprotocols::txsubmission::Error) -> Self {
+        BlockfrostError::internal_server_error(format!("TxSubmissionError: {}", err))
+    }
+}
+
+impl From<TryFromSliceError> for BlockfrostError {
+    fn from(err: TryFromSliceError) -> Self {
+        BlockfrostError::internal_server_error(format!("Hash conversion failed: {}", err))
+    }
+}
+
+impl From<PeerClientError> for BlockfrostError {
+    fn from(err: PeerClientError) -> Self {
+        BlockfrostError::internal_server_error(format!("PeerClientError: {}", err))
     }
 }
 
