@@ -19,6 +19,7 @@ use errors::AppError;
 use errors::BlockfrostError;
 use middlewares::errors::error_middleware;
 use std::sync::Arc;
+use std::sync::RwLock;
 use tower::ServiceBuilder;
 use tower_http::normalize_path::NormalizePathLayer;
 
@@ -36,10 +37,12 @@ async fn main() -> Result<(), AppError> {
         .await
         .map_err(|e| AppError::NodeError(e.to_string()))?;
 
+    let node = Arc::new(RwLock::new(node));
+
     let app = Router::new()
         .route("/", get(root::route))
         .route("/tx/submit", post(tx::submit::route))
-        .layer(Extension(Arc::new(node)))
+        .layer(Extension(node))
         .layer(from_fn(error_middleware))
         .fallback(BlockfrostError::not_found());
 

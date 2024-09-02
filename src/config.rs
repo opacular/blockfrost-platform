@@ -62,11 +62,6 @@ pub struct NodeInput {
 }
 
 #[derive(Debug, Deserialize, Clone)]
-pub struct Db {
-    pub connection_string: String,
-}
-
-#[derive(Debug, Deserialize, Clone)]
 pub struct ConfigInput {
     pub server: ServerInput,
     pub node: NodeInput,
@@ -76,13 +71,6 @@ pub struct ConfigInput {
 pub struct Config {
     pub server: Server,
     pub node: Node,
-}
-
-#[derive(Debug, Deserialize, Clone)]
-pub struct Blockfrost {
-    pub project_id: String,
-    pub nft_asset: String,
-    pub api_url_pattern: String,
 }
 
 pub fn load_config(path: PathBuf) -> Result<Config, ConfigError> {
