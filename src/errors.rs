@@ -19,8 +19,8 @@ pub enum AppError {
     ServerError(String),
 }
 
-/// Our custom error type.
-/// It has three fields:
+/// Main error type.
+/// Contains the following fields:
 /// - status_code: the HTTP status code to return
 /// - error: a short description of the error
 /// - message: a longer description of the error
