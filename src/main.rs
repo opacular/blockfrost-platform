@@ -19,7 +19,7 @@ use errors::AppError;
 use errors::BlockfrostError;
 use middlewares::errors::error_middleware;
 use std::sync::Arc;
-use std::sync::RwLock;
+use tokio::sync::RwLock;
 use tower::ServiceBuilder;
 use tower_http::normalize_path::NormalizePathLayer;
 
@@ -33,11 +33,11 @@ async fn main() -> Result<(), AppError> {
         .with_max_level(config.server.log_level)
         .init();
 
-    let node = node::Node::new(&config.node.endpoint, config.server.network_magic)
+    let node_instance = node::Node::new(&config.node.endpoint, config.server.network_magic)
         .await
         .map_err(|e| AppError::NodeError(e.to_string()))?;
 
-    let node = Arc::new(RwLock::new(node));
+    let node = Arc::new(RwLock::new(node_instance));
 
     let app = Router::new()
         .route("/", get(root::route))
