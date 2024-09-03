@@ -32,14 +32,23 @@ impl Node {
         client_txsub.reply_tx_ids(ids_and_size).await?;
         client_txsub.reply_txs(tx_body).await?;
 
-        match client_txsub.next_request().await? {
-            TxIds(ack, _) => {
+        match client_txsub.next_request().await {
+            // successfully received ack
+            Ok(TxIds(ack, _)) => {
                 client_txsub.send_done().await?;
                 Ok(ack.to_string())
             }
-            _ => Err(BlockfrostError::internal_server_error(
-                "Unexpected response from node".to_string(),
-            )),
+            Ok(_) => {
+                // unexpected response, handle error
+                client_txsub.send_done().await?;
+                Err(BlockfrostError::internal_server_error(
+                    "Unexpected response from node".to_string(),
+                ))
+            }
+            Err(e) => {
+                client_txsub.send_done().await?;
+                Err(BlockfrostError::from(e))
+            }
         }
     }
 }

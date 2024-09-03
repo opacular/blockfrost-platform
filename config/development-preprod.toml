@@ -1,5 +1,5 @@
 [server]
 address = '0.0.0.0:3000'
 log_level = 'info'
-network = 'mainnet'
+network = 'preprod'
 relay = 'relays-new.cardano-preprod.iohk.io:3001'
