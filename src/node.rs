@@ -1,4 +1,5 @@
 use crate::errors::BlockfrostError;
+use pallas_network::miniprotocols::txsubmission::Request::TxIds;
 use pallas_network::{
     facades::PeerClient,
     miniprotocols::txsubmission::{EraTxBody, EraTxId, TxIdAndSize},
@@ -21,11 +22,9 @@ impl Node {
         &mut self,
         tx_bytes: Vec<u8>,
     ) -> Result<String, BlockfrostError> {
-        let tx_hash: [u8; 32] = tx_bytes[..].try_into()?;
         let tx_size = tx_bytes.len() as u32;
-
-        let ids_and_size = vec![TxIdAndSize(EraTxId(4, tx_hash.to_vec()), tx_size)];
-        let tx_body = vec![EraTxBody(4, tx_bytes.clone())];
+        let ids_and_size = vec![TxIdAndSize(EraTxId(4, tx_bytes.clone()), tx_size)];
+        let tx_body = vec![EraTxBody(4, tx_bytes)];
 
         let client_txsub = self.client.txsubmission();
 
@@ -34,7 +33,7 @@ impl Node {
         client_txsub.reply_txs(tx_body).await?;
 
         match client_txsub.next_request().await? {
-            pallas_network::miniprotocols::txsubmission::Request::TxIds(ack, _) => {
+            TxIds(ack, _) => {
                 client_txsub.send_done().await?;
                 Ok(ack.to_string())
             }

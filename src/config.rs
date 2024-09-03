@@ -33,6 +33,7 @@ pub struct ServerInput {
     pub address: String,
     pub log_level: String,
     pub network: String,
+    pub relay: String,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -41,11 +42,7 @@ pub struct Server {
     #[serde(deserialize_with = "deserialize_log_level")]
     pub log_level: Level,
     pub network_magic: u64,
-}
-
-#[derive(Debug, Deserialize, Clone)]
-pub struct Node {
-    pub endpoint: String,
+    pub relay: String,
 }
 
 fn deserialize_log_level<'de, D>(deserializer: D) -> Result<Level, D::Error>
@@ -57,20 +54,13 @@ where
 }
 
 #[derive(Debug, Deserialize, Clone)]
-pub struct NodeInput {
-    pub endpoint: String,
-}
-
-#[derive(Debug, Deserialize, Clone)]
 pub struct ConfigInput {
     pub server: ServerInput,
-    pub node: NodeInput,
 }
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct Config {
     pub server: Server,
-    pub node: Node,
 }
 
 pub fn load_config(path: PathBuf) -> Result<Config, ConfigError> {
@@ -100,9 +90,7 @@ pub fn load_config(path: PathBuf) -> Result<Config, ConfigError> {
             address: toml_config.server.address,
             log_level,
             network_magic,
-        },
-        node: Node {
-            endpoint: toml_config.node.endpoint,
+            relay: toml_config.server.relay,
         },
     })
 }

@@ -2,6 +2,4 @@
 address = '0.0.0.0:3000'
 log_level = 'info'
 network = 'mainnet'
-
-[node]
-endpoint = 'relays-new.cardano-mainnet.iohk.io:3001'
+relay = 'relays-new.cardano-mainnet.iohk.io:3001'

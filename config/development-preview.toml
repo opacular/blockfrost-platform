@@ -2,6 +2,4 @@
 address = '0.0.0.0:3000'
 log_level = 'info'
 network = 'preview'
-
-[node]
-endpoint = 'relays-new.cardano-preview.iohk.io:3001'
+relays = 'relays-new.cardano-preprod.iohk.io:3001'

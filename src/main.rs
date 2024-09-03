@@ -33,7 +33,7 @@ async fn main() -> Result<(), AppError> {
         .with_max_level(config.server.log_level)
         .init();
 
-    let node_instance = node::Node::new(&config.node.endpoint, config.server.network_magic)
+    let node_instance = node::Node::new(&config.server.relay, config.server.network_magic)
         .await
         .map_err(|e| AppError::NodeError(e.to_string()))?;
 
