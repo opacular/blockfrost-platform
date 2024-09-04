@@ -1,1 +1,1 @@
-# blockfrost-instance
+# blockfrost-platform
