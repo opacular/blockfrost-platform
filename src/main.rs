@@ -13,7 +13,6 @@ use axum::routing::{get, post};
 use axum::Extension;
 use axum::{Router, ServiceExt};
 use clap::Parser;
-use colored::Colorize;
 use config::Args;
 use errors::AppError;
 use errors::BlockfrostError;
@@ -22,21 +21,18 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tower::ServiceBuilder;
 use tower_http::normalize_path::NormalizePathLayer;
+use tracing::info;
 
 #[tokio::main]
 async fn main() -> Result<(), AppError> {
     let arguments = Args::parse();
-    let config =
-        config::load_config(arguments.config).map_err(|e| AppError::ConfigError(e.to_string()))?;
+    let config = config::load_config(arguments.config)?;
 
     tracing_subscriber::fmt()
         .with_max_level(config.server.log_level)
         .init();
 
-    let node_instance = node::Node::new(&config.server.relay, config.server.network_magic)
-        .await
-        .map_err(|e| AppError::NodeError(e.to_string()))?;
-
+    let node_instance = node::Node::new(&config.server.relay, config.server.network_magic).await?;
     let node = Arc::new(RwLock::new(node_instance));
 
     let app = Router::new()
@@ -50,24 +46,12 @@ async fn main() -> Result<(), AppError> {
         .layer(NormalizePathLayer::trim_trailing_slash())
         .service(app);
 
-    let listener = tokio::net::TcpListener::bind(&config.server.address)
-        .await
-        .expect("Failed to bind to address");
+    let listener = tokio::net::TcpListener::bind(&config.server.address).await?;
 
-    println!(
-        "{}",
-        format!(
-            "\nAddress: 🌍 http://{}\n\
-             Log Level: 📘 {}\n",
-            config.server.address, config.server.log_level,
-        )
-        .white()
-        .bold()
-    );
+    info!("Server is listening on {}", config.server.address);
+    info!("Log level {}", config.server.log_level);
 
-    axum::serve(listener, ServiceExt::<Request>::into_make_service(app))
-        .await
-        .map_err(|e| AppError::ServerError(e.to_string()))?;
+    axum::serve(listener, ServiceExt::<Request>::into_make_service(app)).await?;
 
     Ok(())
 }

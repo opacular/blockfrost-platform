@@ -1,6 +1,5 @@
 use crate::errors::BlockfrostError;
-use axum::http::HeaderMap;
-use reqwest::header::CONTENT_TYPE;
+use axum::http::{header::CONTENT_TYPE, HeaderMap};
 
 /// Helper to validate content type or return custom BlockfrostError 400
 pub fn validate_content_type(

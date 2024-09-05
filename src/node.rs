@@ -1,20 +1,27 @@
-use crate::errors::BlockfrostError;
+use crate::errors::{AppError, BlockfrostError};
 use pallas_network::miniprotocols::txsubmission::Request::TxIds;
 use pallas_network::{
     facades::PeerClient,
     miniprotocols::txsubmission::{EraTxBody, EraTxId, TxIdAndSize},
 };
+use tracing::info;
 
 pub struct Node {
     client: PeerClient,
 }
 
 impl Node {
-    /// Creates a new `Node` instance and connects to the specified Cardano network.
-    pub async fn new(url: &str, network_magic: u64) -> Result<Node, BlockfrostError> {
-        let client = PeerClient::connect(url, network_magic).await?;
+    /// Creates a new `Node` instance
+    pub async fn new(url: &str, network_magic: u64) -> Result<Node, AppError> {
+        info!("Connecting to node {}", url);
 
-        Ok(Self { client })
+        let client = PeerClient::connect(url, network_magic)
+            .await
+            .map_err(|e| AppError::NodeError(format!("Failed to connect to node: {}", e)))?;
+
+        info!("Connection to node was successfully established");
+
+        Ok(Node { client })
     }
 
     /// Submits a transaction to the connected Cardano node.
@@ -22,6 +29,8 @@ impl Node {
         &mut self,
         tx_bytes: Vec<u8>,
     ) -> Result<String, BlockfrostError> {
+        info!("Submitting transaction to node");
+
         let tx_size = tx_bytes.len() as u32;
         let ids_and_size = vec![TxIdAndSize(EraTxId(4, tx_bytes.clone()), tx_size)];
         let tx_body = vec![EraTxBody(4, tx_bytes)];

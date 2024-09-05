@@ -5,7 +5,11 @@ use pallas_network::facades::Error as PeerClientError;
 use serde::{Deserialize, Serialize};
 use std::array::TryFromSliceError;
 use std::fmt;
+use std::io;
 use thiserror::Error;
+use tracing::error;
+
+use crate::config::ConfigError;
 
 #[derive(Error, Debug)]
 pub enum AppError {
@@ -34,6 +38,20 @@ pub struct BlockfrostError {
 impl From<std::num::TryFromIntError> for BlockfrostError {
     fn from(err: std::num::TryFromIntError) -> Self {
         Self::internal_server_error(format!("ConversionError: {}", err))
+    }
+}
+
+impl From<io::Error> for AppError {
+    fn from(err: io::Error) -> Self {
+        error!("I/O Error occurred: {}", err); // Log the error
+        AppError::ServerError(err.to_string())
+    }
+}
+
+impl From<ConfigError> for AppError {
+    fn from(err: ConfigError) -> Self {
+        error!("Configuration Error: {}", err); // Log the error
+        AppError::ConfigError(err.to_string())
     }
 }
 
