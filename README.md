@@ -26,3 +26,47 @@ cd blockfrost-instance
 
 # Build the project
 cargo build --release
+
+```
+
+## Usage
+
+```shell
+blockfrost-platform [OPTIONS] --network <NETWORK> --node-address <NODE_ADDRESS> --secret <SECRET> --reward-address <REWARD_ADDRESS>
+```
+
+### Options
+
+- **`-a, --server-address <SERVER_ADDRESS>`**  
+  Default: `0.0.0.0`
+
+- **`-p, --server-port <SERVER_PORT>`**  
+  Default: `3000`
+
+- **`-n, --network <NETWORK>`**  
+  Possible values: `mainnet`, `preprod`, `preview`, `sanchonet`
+
+- **`-l, --log-level <LOG_LEVEL>`**  
+  Default: `info`  
+  Possible values: `debug`, `info`, `warn`, `error`, `trace`
+
+- **`-d, --node-address <NODE_ADDRESS>`**  
+
+- **`-m, --mode <MODE>`**  
+  Default: `compact`  
+  Possible values: `compact`, `light`, `full`
+
+- **`-e, --secret <SECRET>`**
+
+- **`-r, --reward-address <REWARD_ADDRESS>`**
+
+- **`-h, --help`**  
+  Print help
+
+- **`-V, --version`**  
+  Print version
+  -h, --help
+          Print help
+  -V, --version
+          Print version
+```
