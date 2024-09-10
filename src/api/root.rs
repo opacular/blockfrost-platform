@@ -10,7 +10,7 @@ pub struct Response {
 
 pub async fn route() -> Json<Response> {
     let response = Response {
-        name: "blockfrost-instance".to_string(),
+        name: "blockfrost-platform".to_string(),
         version: env!("CARGO_PKG_VERSION").to_string(),
         healthy: true,
     };

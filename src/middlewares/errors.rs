@@ -18,17 +18,19 @@ pub async fn error_middleware(request: Request, next: Next) -> Result<Response, 
     let response = next.run(request).await;
     let status_code = response.status();
 
-    // transform timeout to internal server error for user
+    // Transform timeout to internal server error for user
+    // 504 Gateway Timeout
     if response.status() == StatusCode::REQUEST_TIMEOUT {
         return Ok(BlockfrostError::internal_server_error_user().into_response());
     }
 
-    // transform our custom METHOD_NOT_ALLOWED err
+    // Transform our custom METHOD_NOT_ALLOWED err
+    // to 405 status code
     if response.status() == StatusCode::METHOD_NOT_ALLOWED {
         return Ok(BlockfrostError::method_not_allowed().into_response());
     }
 
-    // lets handle and log 5xx
+    // Transform server errors to internal server error for user
     if response.status().is_server_error() {
         handle_server_error(response, &request_path, status_code).await
     } else {

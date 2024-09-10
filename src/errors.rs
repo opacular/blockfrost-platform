@@ -9,15 +9,16 @@ use std::io;
 use thiserror::Error;
 use tracing::error;
 
-use crate::config::ConfigError;
-
 #[derive(Error, Debug)]
 pub enum AppError {
-    #[error("Configuration error: {0}")]
-    ConfigError(String),
+    #[error("Configuration error: field: {0} is {1}")]
+    ConfigError(String, String),
 
     #[error("Node connection error: {0}")]
     NodeError(String),
+
+    #[error("Icebreaker register error: {0}")]
+    IcebreakersRegisterError(String),
 
     #[error("Server startup error: {0}")]
     ServerError(String),
@@ -41,23 +42,16 @@ impl From<std::num::TryFromIntError> for BlockfrostError {
     }
 }
 
+impl From<serde_json::Error> for BlockfrostError {
+    fn from(err: serde_json::Error) -> Self {
+        Self::internal_server_error(format!("SerdeError: {}", err))
+    }
+}
+
 impl From<io::Error> for AppError {
     fn from(err: io::Error) -> Self {
         error!("I/O Error occurred: {}", err); // Log the error
         AppError::ServerError(err.to_string())
-    }
-}
-
-impl From<ConfigError> for AppError {
-    fn from(err: ConfigError) -> Self {
-        error!("Configuration Error: {}", err); // Log the error
-        AppError::ConfigError(err.to_string())
-    }
-}
-
-impl From<serde_json::Error> for BlockfrostError {
-    fn from(err: serde_json::Error) -> Self {
-        Self::internal_server_error(format!("SerdeError: {}", err))
     }
 }
 
@@ -137,9 +131,11 @@ impl IntoResponse for BlockfrostError {
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         };
 
+        error!("Error occurred: {} - {}", self.error, self.message);
+
         let error_response = Self {
-            error: self.error,
-            message: self.message,
+            error: self.error.clone(),
+            message: self.message.clone(),
             status_code: self.status_code,
         };
 

@@ -1,7 +1,8 @@
 mod api;
+mod cli;
 mod common;
-mod config;
 mod errors;
+mod icebreakers;
 mod middlewares;
 mod node;
 
@@ -13,7 +14,8 @@ use axum::routing::{get, post};
 use axum::Extension;
 use axum::{Router, ServiceExt};
 use clap::Parser;
-use config::Args;
+use cli::Args;
+use cli::Config;
 use errors::AppError;
 use errors::BlockfrostError;
 use middlewares::errors::error_middleware;
@@ -26,19 +28,23 @@ use tracing::info;
 #[tokio::main]
 async fn main() -> Result<(), AppError> {
     let arguments = Args::parse();
-    let config = config::load_config(arguments.config)?;
+    let config = Config::from_args(arguments)?;
 
     tracing_subscriber::fmt()
-        .with_max_level(config.server.log_level)
+        .with_max_level(config.log_level)
         .init();
 
-    let node_instance = node::Node::new(&config.server.relay, config.server.network_magic).await?;
-    let node = Arc::new(RwLock::new(node_instance));
+    let node = Arc::new(RwLock::new(
+        node::Node::new(&config.node_address, config.network_magic).await?,
+    ));
+
+    let icebreakers = Arc::new(RwLock::new(icebreakers::Icebreakers::new(&config).await?));
 
     let app = Router::new()
         .route("/", get(root::route))
         .route("/tx/submit", post(tx::submit::route))
         .layer(Extension(node))
+        .layer(Extension(icebreakers))
         .layer(from_fn(error_middleware))
         .fallback(BlockfrostError::not_found());
 
@@ -46,10 +52,10 @@ async fn main() -> Result<(), AppError> {
         .layer(NormalizePathLayer::trim_trailing_slash())
         .service(app);
 
-    let listener = tokio::net::TcpListener::bind(&config.server.address).await?;
+    let listener = tokio::net::TcpListener::bind(&config.server_address).await?;
 
-    info!("Server is listening on {}", config.server.address);
-    info!("Log level {}", config.server.log_level);
+    info!("Server is listening on {}", config.node_address);
+    info!("Log level {}", config.log_level);
 
     axum::serve(listener, ServiceExt::<Request>::into_make_service(app)).await?;
 

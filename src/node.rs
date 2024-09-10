@@ -13,13 +13,13 @@ pub struct Node {
 impl Node {
     /// Creates a new `Node` instance
     pub async fn new(url: &str, network_magic: u64) -> Result<Node, AppError> {
-        info!("Connecting to node {}", url);
+        info!("Connecting to node {}...", url);
 
         let client = PeerClient::connect(url, network_magic)
             .await
-            .map_err(|e| AppError::NodeError(format!("Failed to connect to node: {}", e)))?;
+            .map_err(|e| AppError::NodeError(format!("Failed to connect to node: {}.", e)))?;
 
-        info!("Connection to node was successfully established");
+        info!("Connection to node was successfully established.");
 
         Ok(Node { client })
     }
@@ -29,7 +29,7 @@ impl Node {
         &mut self,
         tx_bytes: Vec<u8>,
     ) -> Result<String, BlockfrostError> {
-        info!("Submitting transaction to node");
+        info!("Submitting transaction to node.");
 
         let tx_size = tx_bytes.len() as u32;
         let ids_and_size = vec![TxIdAndSize(EraTxId(4, tx_bytes.clone()), tx_size)];
@@ -48,13 +48,15 @@ impl Node {
                 Ok(ack.to_string())
             }
             Ok(_) => {
-                // unexpected response, handle error
+                // Unexpected response, handle error
+                // Send done to close the connection
                 client_txsub.send_done().await?;
                 Err(BlockfrostError::internal_server_error(
                     "Unexpected response from node".to_string(),
                 ))
             }
             Err(e) => {
+                // Error occurred, send done to close the connection
                 client_txsub.send_done().await?;
                 Err(BlockfrostError::from(e))
             }

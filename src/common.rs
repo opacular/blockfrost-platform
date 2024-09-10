@@ -2,6 +2,12 @@ use crate::errors::BlockfrostError;
 use axum::http::{header::CONTENT_TYPE, HeaderMap};
 
 /// Helper to validate content type or return custom BlockfrostError 400
+/// Arguments:
+/// * headers: &HeaderMap - headers from request
+/// * allowed_headers: &[&str] - allowed content types
+/// Returns:
+/// * Result<bool, BlockfrostError> - true if content type is valid
+/// * BlockfrostError - custom 400 error if content type is invalid
 pub fn validate_content_type(
     headers: &HeaderMap,
     allowed_headers: &[&str],
