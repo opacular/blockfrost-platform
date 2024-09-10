@@ -69,4 +69,3 @@ blockfrost-platform [OPTIONS] --network <NETWORK> --node-address <NODE_ADDRESS> 
           Print help
   -V, --version
           Print version
-```
