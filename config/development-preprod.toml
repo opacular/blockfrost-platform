@@ -1,5 +1,0 @@
-[server]
-address = '0.0.0.0:3000'
-log_level = 'info'
-network = 'preprod'
-relay = 'https://preprod-node.world.dev.cardano.org:3000'

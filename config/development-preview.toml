@@ -1,5 +1,0 @@
-[server]
-address = '0.0.0.0:3000'
-log_level = 'info'
-network = 'preview'
-relay = 'relays-new.cardano-preview.iohk.io:3001'

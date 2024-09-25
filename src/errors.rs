@@ -11,9 +11,6 @@ use tracing::error;
 
 #[derive(Error, Debug)]
 pub enum AppError {
-    #[error("Configuration error: field: {0} is {1}")]
-    ConfigError(String, String),
-
     #[error("Node connection error: {0}")]
     NodeError(String),
 

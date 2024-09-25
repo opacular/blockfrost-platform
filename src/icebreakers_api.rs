@@ -3,7 +3,7 @@ use reqwest::Client;
 use serde_json::json;
 use tracing::{error, info};
 
-pub struct Icebreakers {
+pub struct IcebreakersAPI {
     client: Client,
     url: String,
     secret: String,
@@ -12,14 +12,14 @@ pub struct Icebreakers {
 
 const API_URL: &str = "https://icebreakers-api.blockfrost.io";
 
-impl Icebreakers {
+impl IcebreakersAPI {
     /// Creates a new `Icebreakers` instance
-    pub async fn new(config: &Config) -> Result<Icebreakers, AppError> {
+    pub async fn new(config: &Config) -> Result<IcebreakersAPI, AppError> {
         info!("Connecting to icebreakers API...");
 
         let client = Client::new();
         let url = format!("{}/health", API_URL);
-        let mut icebreakers = Icebreakers {
+        let mut icebreakers = IcebreakersAPI {
             client,
             url,
             secret: config.secret.clone(),

@@ -2,7 +2,7 @@ mod api;
 mod cli;
 mod common;
 mod errors;
-mod icebreakers;
+mod icebreakers_api;
 mod middlewares;
 mod node;
 
@@ -38,13 +38,15 @@ async fn main() -> Result<(), AppError> {
         node::Node::new(&config.node_address, config.network_magic).await?,
     ));
 
-    let icebreakers = Arc::new(RwLock::new(icebreakers::Icebreakers::new(&config).await?));
+    let icebreakers_api = Arc::new(RwLock::new(
+        icebreakers_api::IcebreakersAPI::new(&config).await?,
+    ));
 
     let app = Router::new()
         .route("/", get(root::route))
         .route("/tx/submit", post(tx::submit::route))
         .layer(Extension(node))
-        .layer(Extension(icebreakers))
+        .layer(Extension(icebreakers_api))
         .layer(from_fn(error_middleware))
         .fallback(BlockfrostError::not_found());
 
