@@ -4,23 +4,23 @@ version = "0.0.1"
 edition = "2021"
 
 [dependencies]
-axum = "0.7.5"
+axum = "0.7.6"
 tokio = { version = "1.39.2", features = ["full"] }
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
-serde = { version = "1.0.205", features = ["derive"] }
-tower-http = { version = "0.5.2", features = ["full"] }
+serde = { version = "1.0.210", features = ["derive"] }
+tower-http = { version = "0.6.1", features = ["full"] }
 tower-layer = "0.3.2"
-tower = "0.4.13"
+tower = "0.5.1"
 serde_json = "1.0.122"
-clap = { version = "4.5.14", features = ["derive"] }
+clap = { version = "4.5.18", features = ["derive"] }
 toml = "0.8.19"
-thiserror = "1.0.63"
+thiserror = "1.0.64"
 sentry = "0.34.0"
-pallas-network = "0.30.1"
-pallas-crypto = "0.30.1"
+pallas-network = "0.30.2"
+pallas-crypto = "0.30.2"
 reqwest = "0.12.7"
 
 [dev-dependencies]
-rstest = "0.21.0"
-pretty_assertions = "1.2.1"
+rstest = "0.22.0"
+pretty_assertions = "1.4.1"

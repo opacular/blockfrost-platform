@@ -14,9 +14,6 @@ pub enum AppError {
     #[error("Node connection error: {0}")]
     NodeError(String),
 
-    #[error("Icebreaker register error: {0}")]
-    IcebreakersRegisterError(String),
-
     #[error("Server startup error: {0}")]
     ServerError(String),
 }
