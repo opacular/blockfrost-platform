@@ -43,7 +43,7 @@ jobs:
       - name: Package binaries
         run: |
           mkdir -p artifacts
-          cp target/release/blockfrost_platform* artifacts/
+          cp target/release/blockfrost-platform* artifacts/
       - name: Upload artifacts
         uses: actions/upload-artifact@v3
         with:
