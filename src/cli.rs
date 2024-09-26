@@ -1,3 +1,5 @@
+use std::fmt::{self, Formatter};
+
 use crate::errors::AppError;
 use clap::{arg, command, Parser, ValueEnum};
 use pallas_network::miniprotocols::{MAINNET_MAGIC, PREPROD_MAGIC, PREVIEW_MAGIC, SANCHONET_MAGIC};
@@ -101,6 +103,16 @@ impl From<LogLevel> for Level {
             LogLevel::Warn => Level::WARN,
             LogLevel::Error => Level::ERROR,
             LogLevel::Trace => Level::TRACE,
+        }
+    }
+}
+
+impl std::fmt::Display for Mode {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        match self {
+            Mode::Compact => write!(f, "compact"),
+            Mode::Light => write!(f, "light"),
+            Mode::Full => write!(f, "full"),
         }
     }
 }

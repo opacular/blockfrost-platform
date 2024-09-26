@@ -58,6 +58,7 @@ async fn main() -> Result<(), AppError> {
 
     info!("Server is listening on {}", config.node_address);
     info!("Log level {}", config.log_level);
+    info!("Mode {}", config.mode);
 
     axum::serve(listener, ServiceExt::<Request>::into_make_service(app)).await?;
 
