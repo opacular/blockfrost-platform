@@ -8,7 +8,7 @@ env:
 
 jobs:
   build_and_test:
-    name: Rust Project CI
+    name: CI
     runs-on: ${{ matrix.os }}
 
     strategy:
