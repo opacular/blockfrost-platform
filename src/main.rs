@@ -54,9 +54,10 @@ async fn main() -> Result<(), AppError> {
         .layer(NormalizePathLayer::trim_trailing_slash())
         .service(app);
 
-    let listener = tokio::net::TcpListener::bind(&config.server_address).await?;
+    let addr = format!("{}:{}", config.server_address, config.server_port);
+    let listener = tokio::net::TcpListener::bind(&addr).await?;
 
-    info!("Server is listening on {}", config.node_address);
+    info!("Server is listening on {}", addr);
     info!("Log level {}", config.log_level);
     info!("Mode {}", config.mode);
 
