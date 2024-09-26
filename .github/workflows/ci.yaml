@@ -10,23 +10,21 @@ jobs:
   build_and_test:
     name: CI
     runs-on: ${{ matrix.os }}
-
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
         rust: [stable]
       fail-fast: false
-
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
+        uses: actions/setup-rust@v1
         with:
+          profile: minimal
           toolchain: ${{ matrix.rust }}
           components: rustfmt, rust-src, clippy
-          override: true
 
       - name: Build
         run: cargo build --release --verbose
@@ -44,8 +42,9 @@ jobs:
         run: |
           mkdir -p artifacts
           cp target/release/blockfrost-platform* artifacts/
+
       - name: Upload artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ runner.os }}-binary
           path: artifacts/
