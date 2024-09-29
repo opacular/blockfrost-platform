@@ -1,23 +1,49 @@
 use crate::errors::{AppError, BlockfrostError};
-use pallas_network::miniprotocols::txsubmission::Request::TxIds;
+use pallas::network::multiplexer::Plexer;
+use tokio::net::UnixStream;
+
 use pallas_network::{
-    facades::PeerClient,
-    miniprotocols::txsubmission::{EraTxBody, EraTxId, TxIdAndSize},
+    facades::{NodeClient, PeerClient},
+    miniprotocols::{
+        localtxsubmission::{Client, EraTx, Response},
+        txsubmission::{EraTxId, TxIdAndSize},
+    },
+    multiplexer::Bearer,
 };
+use tokio::net::TcpStream;
 use tracing::info;
 
 pub struct Node {
-    client: PeerClient,
+    client: Client,
 }
 
 impl Node {
     /// Creates a new `Node` instance
-    pub async fn new(url: &str, network_magic: u64) -> Result<Node, AppError> {
-        info!("Connecting to node {}...", url);
+    pub async fn new(socket: &str, network_magic: u64) -> Result<Node, AppError> {
+        info!("Connecting to node {} ...", socket);
 
-        let client = PeerClient::connect(url, network_magic)
-            .await
-            .map_err(|e| AppError::NodeError(format!("Failed to connect to node: {}.", e)))?;
+        // Connect to the local node via Unix domain socket
+        let socket = UnixStream::connect(socket).await?;
+        // info!("Connected to node at {}", node_socket);
+
+        // Create a bearer from the Unix socket
+        let bearer = Bearer::Unix(socket);
+
+        // Initialize the Plexer with the bearer
+        let mut plexer = Plexer::new(bearer);
+        info!("Plexer set up successfully.");
+
+        // Use the LocalTxSubmission protocol channel (protocol ID 7)
+        let channel = plexer.subscribe_client(7);
+        info!("Channel for LocalTxSubmission protocol created.");
+
+        // Spawn the plexer tasks
+        let plexer_tasks = plexer.spawn();
+        info!("Plexer tasks spawned.");
+
+        // Create a TxSubmissionClient instance using the channel
+        let mut client = Client::new(channel);
+        info!("TxSubmissionClient initialized.");
 
         info!("Connection to node was successfully established.");
 
@@ -31,35 +57,15 @@ impl Node {
     ) -> Result<String, BlockfrostError> {
         info!("Submitting transaction to node.");
 
-        let tx_size = tx_bytes.len() as u32;
-        let ids_and_size = vec![TxIdAndSize(EraTxId(4, tx_bytes.clone()), tx_size)];
-        let tx_body = vec![EraTxBody(4, tx_bytes)];
+        let tx = EraTx(5, tx_bytes.clone());
 
-        let client_txsub = self.client.txsubmission();
+        let response = self.client.submit_tx(tx).await.unwrap();
 
-        client_txsub.send_init().await?;
-        client_txsub.reply_tx_ids(ids_and_size).await?;
-        client_txsub.reply_txs(tx_body).await?;
-
-        match client_txsub.next_request().await {
-            // successfully received ack
-            Ok(TxIds(ack, _)) => {
-                client_txsub.send_done().await?;
-                Ok(ack.to_string())
-            }
-            Ok(_) => {
-                // Unexpected response, handle error
-                // Send done to close the connection
-                client_txsub.send_done().await?;
-                Err(BlockfrostError::internal_server_error(
-                    "Unexpected response from node".to_string(),
-                ))
-            }
-            Err(e) => {
-                // Error occurred, send done to close the connection
-                client_txsub.send_done().await?;
-                Err(BlockfrostError::from(e))
-            }
+        match response {
+            Response::Accepted => println!("Transaction accepted by the node."),
+            Response::Rejected(reason) => println!("Transaction rejected: {:?}", reason),
         }
+
+        Ok("Transaction submitted.".to_string())
     }
 }

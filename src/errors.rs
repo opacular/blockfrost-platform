@@ -14,6 +14,9 @@ pub enum AppError {
     #[error("Node connection error: {0}")]
     NodeError(String),
 
+    #[error("Internal server error: {0}")]
+    TxSubmissionError(String),
+
     #[error("Server startup error: {0}")]
     ServerError(String),
 }

@@ -17,9 +17,11 @@ clap = { version = "4.5.18", features = ["derive"] }
 toml = "0.8.19"
 thiserror = "1.0.64"
 sentry = "0.34.0"
+blake2 = "0.10.6"
 pallas-network = "0.30.2"
 pallas-crypto = "0.30.2"
 reqwest = "0.12.7"
+pallas = "0.30.2"
 
 [dev-dependencies]
 rstest = "0.22.0"

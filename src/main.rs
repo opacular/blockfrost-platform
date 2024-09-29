@@ -24,6 +24,7 @@ use tokio::sync::RwLock;
 use tower::ServiceBuilder;
 use tower_http::normalize_path::NormalizePathLayer;
 use tracing::info;
+use tracing_subscriber::fmt::format::Format;
 
 #[tokio::main]
 async fn main() -> Result<(), AppError> {
@@ -32,6 +33,13 @@ async fn main() -> Result<(), AppError> {
 
     tracing_subscriber::fmt()
         .with_max_level(config.log_level)
+        .event_format(
+            Format::default()
+                .with_ansi(true)
+                .with_level(true)
+                .with_target(false)
+                .compact(),
+        )
         .init();
 
     let node = Arc::new(RwLock::new(
