@@ -1,49 +1,23 @@
 use crate::errors::{AppError, BlockfrostError};
-use pallas::network::multiplexer::Plexer;
-use tokio::net::UnixStream;
+use axum::body::Bytes;
+use pallas_crypto::hash::Hasher;
 
 use pallas_network::{
-    facades::{NodeClient, PeerClient},
-    miniprotocols::{
-        localtxsubmission::{Client, EraTx, Response},
-        txsubmission::{EraTxId, TxIdAndSize},
-    },
-    multiplexer::Bearer,
+    facades::NodeClient,
+    miniprotocols::localtxsubmission::{EraTx, Response},
 };
-use tokio::net::TcpStream;
-use tracing::info;
+use tracing::{info, warn};
 
 pub struct Node {
-    client: Client,
+    client: NodeClient,
 }
 
 impl Node {
     /// Creates a new `Node` instance
     pub async fn new(socket: &str, network_magic: u64) -> Result<Node, AppError> {
-        info!("Connecting to node {} ...", socket);
+        info!("Connecting to node socket {} ...", socket);
 
-        // Connect to the local node via Unix domain socket
-        let socket = UnixStream::connect(socket).await?;
-        // info!("Connected to node at {}", node_socket);
-
-        // Create a bearer from the Unix socket
-        let bearer = Bearer::Unix(socket);
-
-        // Initialize the Plexer with the bearer
-        let mut plexer = Plexer::new(bearer);
-        info!("Plexer set up successfully.");
-
-        // Use the LocalTxSubmission protocol channel (protocol ID 7)
-        let channel = plexer.subscribe_client(7);
-        info!("Channel for LocalTxSubmission protocol created.");
-
-        // Spawn the plexer tasks
-        let plexer_tasks = plexer.spawn();
-        info!("Plexer tasks spawned.");
-
-        // Create a TxSubmissionClient instance using the channel
-        let mut client = Client::new(channel);
-        info!("TxSubmissionClient initialized.");
+        let client = NodeClient::connect(socket, network_magic).await?;
 
         info!("Connection to node was successfully established.");
 
@@ -51,21 +25,23 @@ impl Node {
     }
 
     /// Submits a transaction to the connected Cardano node.
-    pub async fn submit_transaction(
-        &mut self,
-        tx_bytes: Vec<u8>,
-    ) -> Result<String, BlockfrostError> {
+    pub async fn submit_transaction(&mut self, tx: Bytes) -> Result<String, BlockfrostError> {
         info!("Submitting transaction to node.");
 
-        let tx = EraTx(5, tx_bytes.clone());
+        let tx_vec = tx.to_vec();
+        let txid = hex::encode(Hasher::<256>::hash_cbor(&tx_vec));
+        let era_tx = EraTx(6, tx_vec);
 
-        let response = self.client.submit_tx(tx).await.unwrap();
+        match self.client.submission().submit_tx(era_tx).await? {
+            Response::Accepted => Ok(txid),
+            Response::Rejected(reason) => {
+                warn!("Transaction was rejected: {}", hex::encode(&reason.0));
 
-        match response {
-            Response::Accepted => println!("Transaction accepted by the node."),
-            Response::Rejected(reason) => println!("Transaction rejected: {:?}", reason),
+                Err(BlockfrostError::custom_400(format!(
+                    "Transaction was rejected: {}",
+                    hex::encode(&reason.0)
+                )))
+            }
         }
-
-        Ok("Transaction submitted.".to_string())
     }
 }

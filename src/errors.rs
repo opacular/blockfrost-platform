@@ -1,7 +1,7 @@
 use axum::response::{IntoResponse, Response};
 use axum::{http, Json};
 use http::StatusCode;
-use pallas_network::facades::Error as PeerClientError;
+use pallas_network::miniprotocols::localtxsubmission::Error as TxSubmissionError;
 use serde::{Deserialize, Serialize};
 use std::array::TryFromSliceError;
 use std::fmt;
@@ -13,9 +13,6 @@ use tracing::error;
 pub enum AppError {
     #[error("Node connection error: {0}")]
     NodeError(String),
-
-    #[error("Internal server error: {0}")]
-    TxSubmissionError(String),
 
     #[error("Server startup error: {0}")]
     ServerError(String),
@@ -64,9 +61,15 @@ impl From<TryFromSliceError> for BlockfrostError {
     }
 }
 
-impl From<PeerClientError> for BlockfrostError {
-    fn from(err: PeerClientError) -> Self {
-        BlockfrostError::internal_server_error(format!("PeerClientError: {}", err))
+impl From<pallas_network::facades::Error> for AppError {
+    fn from(err: pallas_network::facades::Error) -> Self {
+        AppError::NodeError(err.to_string())
+    }
+}
+
+impl From<TxSubmissionError> for BlockfrostError {
+    fn from(err: TxSubmissionError) -> Self {
+        BlockfrostError::internal_server_error(format!("Transaction submission error: {}", err))
     }
 }
 

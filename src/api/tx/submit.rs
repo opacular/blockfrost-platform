@@ -13,7 +13,7 @@ pub async fn route(
 
     // Submit transaction
     let mut node = node.write().await;
-    let response = node.submit_transaction(body.to_vec()).await;
+    let response = node.submit_transaction(body).await;
 
     Ok(Json(response))
 }
