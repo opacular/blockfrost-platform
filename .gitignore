@@ -17,3 +17,10 @@ target/
 #.idea/
 
 .env
+
+# Nix
+result
+result-*
+
+# direnv
+.direnv/
