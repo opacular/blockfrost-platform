@@ -21,7 +21,7 @@ pub struct Args {
     log_level: LogLevel,
 
     #[arg(short = 'd', long, required = true)]
-    node_address: String,
+    node_socket_path: String,
 
     #[arg(short = 'm', long, default_value = "compact")]
     mode: Mode,
@@ -63,7 +63,7 @@ pub struct Config {
     pub log_level: Level,
     pub network_magic: u64,
     pub reward_address: String,
-    pub node_address: String,
+    pub node_socket_path: String,
     pub secret: String,
     pub mode: Mode,
 }
@@ -79,7 +79,7 @@ impl Config {
             reward_address: args.reward_address,
             network_magic,
             secret: args.secret,
-            node_address: args.node_address,
+            node_socket_path: args.node_socket_path,
             mode: args.mode,
         })
     }

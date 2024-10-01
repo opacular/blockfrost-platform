@@ -43,7 +43,7 @@ async fn main() -> Result<(), AppError> {
         .init();
 
     let node = Arc::new(RwLock::new(
-        node::Node::new(&config.node_address, config.network_magic).await?,
+        node::Node::new(&config.node_socket_path, config.network_magic).await?,
     ));
 
     let icebreakers_api = Arc::new(RwLock::new(
