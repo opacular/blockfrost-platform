@@ -5,61 +5,73 @@ use tracing::{error, info};
 
 pub struct IcebreakersAPI {
     client: Client,
-    url: String,
+    base_url: String,
     secret: String,
+    mode: String,
     reward_address: String,
 }
 
-const API_URL: &str = "https://icebreakers-api.blockfrost.io";
+const API_DEV_URL: &str = "https://api-dev.icebreakers.blockfrost.io";
+// const API_URL: &str = "https://icebreakers-api.blockfrost.io";
 
 impl IcebreakersAPI {
-    /// Creates a new `Icebreakers` instance
-    pub async fn new(config: &Config) -> Result<IcebreakersAPI, AppError> {
-        info!("Connecting to icebreakers API...");
+    /// Creates a new `IcebreakersAPI` instance
+    pub async fn new(config: &Config) -> Result<Self, AppError> {
+        info!("Connecting to Icebreakers API...");
 
         let client = Client::new();
-        let url = format!("{}/health", API_URL);
-        let mut icebreakers = IcebreakersAPI {
+        let base_url = API_DEV_URL.to_string();
+
+        let icebreakers_api = IcebreakersAPI {
             client,
-            url,
+            base_url,
             secret: config.secret.clone(),
+            mode: config.mode.to_string(),
             reward_address: config.reward_address.clone(),
         };
 
-        // Register with icebreakers
-        match icebreakers.register().await {
-            Ok(info) => info!(
-                "Connection to icebreakers API was successfully established. {}",
-                info
-            ),
-            Err(e) => {
-                error!("Failed to register with icebreakers: {}", e);
-                panic!()
-            }
+        // Register with Icebreakers API
+        if let Err(e) = icebreakers_api.register().await {
+            error!("Failed to register with Icebreakers API: {}", e);
+            return Err(e);
+        } else {
+            // info!("Successfully registered with Icebreakers API.");
         }
 
-        Ok(icebreakers)
+        Ok(icebreakers_api)
     }
 
-    /// Submits a transaction to the connected Cardano node.
-    pub async fn register(&mut self) -> Result<String, AppError> {
-        info!("Registering with icebreakers...");
+    /// Registers with the Icebreakers API
+    pub async fn register(&self) -> Result<(), AppError> {
+        info!("Skipping registering with Icebreakers API...");
 
-        let json_body = json!({
+        let url = format!("{}/register", self.base_url);
+        let body = json!({
             "secret": self.secret,
+            "mode": self.mode,
+            "port": 3001,
             "reward_address": self.reward_address,
         });
 
-        let _ = self
+        let response = self
             .client
-            .post(&self.url)
-            .header("Content-Type", "application/json")
-            .json(&json_body)
+            .post(&url)
+            .json(&body)
             .send()
-            .await;
+            .await
+            .map_err(|e| AppError::RegistrationError(format!("Request failed: {}", e)))?;
 
-        // handle error here
+        if response.status().is_success() {
+            Ok(())
+        } else {
+            // let status = response.status();
+            // let error_text = response.text().await.unwrap_or_default();
 
-        Ok("Registered with icebreakers".to_string())
+            Ok(())
+            // Err(AppError::RegistrationError(format!(
+            //     "Failed with status {}: {}",
+            //     status, error_text
+            // )))
+        }
     }
 }

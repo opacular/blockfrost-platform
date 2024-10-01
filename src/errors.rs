@@ -14,6 +14,9 @@ pub enum AppError {
     #[error("Node connection error: {0}")]
     NodeError(String),
 
+    #[error("Icebreakers registration error: {0}")]
+    RegistrationError(String),
+
     #[error("Server startup error: {0}")]
     ServerError(String),
 }
@@ -44,7 +47,7 @@ impl From<serde_json::Error> for BlockfrostError {
 
 impl From<io::Error> for AppError {
     fn from(err: io::Error) -> Self {
-        error!("I/O Error occurred: {}", err); // Log the error
+        error!("I/O Error occurred: {}", err);
         AppError::ServerError(err.to_string())
     }
 }
