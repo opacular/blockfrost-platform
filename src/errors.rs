@@ -12,13 +12,13 @@ use tracing::error;
 #[derive(Error, Debug)]
 pub enum AppError {
     #[error("Node connection error: {0}")]
-    NodeError(String),
+    Node(String),
 
     #[error("Icebreakers registration error: {0}")]
-    RegistrationError(String),
+    Registration(String),
 
     #[error("Server startup error: {0}")]
-    ServerError(String),
+    Server(String),
 }
 
 /// Main error type.
@@ -48,7 +48,7 @@ impl From<serde_json::Error> for BlockfrostError {
 impl From<io::Error> for AppError {
     fn from(err: io::Error) -> Self {
         error!("I/O Error occurred: {}", err);
-        AppError::ServerError(err.to_string())
+        AppError::Server(err.to_string())
     }
 }
 
@@ -66,7 +66,7 @@ impl From<TryFromSliceError> for BlockfrostError {
 
 impl From<pallas_network::facades::Error> for AppError {
     fn from(err: pallas_network::facades::Error) -> Self {
-        AppError::NodeError(err.to_string())
+        AppError::Node(err.to_string())
     }
 }
 

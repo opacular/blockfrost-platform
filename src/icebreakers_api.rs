@@ -8,6 +8,7 @@ pub struct IcebreakersAPI {
     base_url: String,
     secret: String,
     mode: String,
+    port: u16,
     reward_address: String,
 }
 
@@ -27,6 +28,7 @@ impl IcebreakersAPI {
             base_url,
             secret: config.secret.clone(),
             mode: config.mode.to_string(),
+            port: config.server_port,
             reward_address: config.reward_address.clone(),
         };
 
@@ -49,7 +51,7 @@ impl IcebreakersAPI {
         let body = json!({
             "secret": self.secret,
             "mode": self.mode,
-            "port": 3001,
+            "port": self.port,
             "reward_address": self.reward_address,
         });
 
@@ -59,7 +61,7 @@ impl IcebreakersAPI {
             .json(&body)
             .send()
             .await
-            .map_err(|e| AppError::RegistrationError(format!("Request failed: {}", e)))?;
+            .map_err(|e| AppError::Registration(format!("Request failed: {}", e)))?;
 
         if response.status().is_success() {
             Ok(())
