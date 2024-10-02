@@ -23,7 +23,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: DeterminateSystems/nix-installer-action@main
+        with:
+          extra-conf: |
+            substituters = https://cache.nixos.org https://cache.iog.io
+            trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= hydra.iohk.io:f/Ea+s+dFdN+3Y/G+FDgSq+a5NEWhJGzdjvKNGv0/EQ=
       - uses: DeterminateSystems/magic-nix-cache-action@main
+        with:
+          upstream-cache: https://cache.iog.io
       - uses: DeterminateSystems/flake-checker-action@main
       - name: Check the repository
         run: nix flake check --show-trace --print-build-logs

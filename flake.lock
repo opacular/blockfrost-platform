@@ -1,5 +1,22 @@
 {
   "nodes": {
+    "cardano-node": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1727221818,
+        "narHash": "sha256-i582YpBy+hBth73JqfcjGFsJrTQeDG0NJ7vN8JLWeoI=",
+        "owner": "IntersectMBO",
+        "repo": "cardano-node",
+        "rev": "5d3da8ac771ee5ed424d6c78473c11deabb7a1f3",
+        "type": "github"
+      },
+      "original": {
+        "owner": "IntersectMBO",
+        "ref": "9.2.1",
+        "repo": "cardano-node",
+        "type": "github"
+      }
+    },
     "crane": {
       "locked": {
         "lastModified": 1727316705,
@@ -32,6 +49,22 @@
       "original": {
         "owner": "numtide",
         "repo": "devshell",
+        "type": "github"
+      }
+    },
+    "flake-compat": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1635892615,
+        "narHash": "sha256-harGbMZr4hzat2BWBU+Y5OYXlu+fVz7E4WeQzHi5o8A=",
+        "owner": "input-output-hk",
+        "repo": "flake-compat",
+        "rev": "eca47d3377946315596da653862d341ee5341318",
+        "type": "github"
+      },
+      "original": {
+        "owner": "input-output-hk",
+        "repo": "flake-compat",
         "type": "github"
       }
     },
@@ -83,8 +116,10 @@
     },
     "root": {
       "inputs": {
+        "cardano-node": "cardano-node",
         "crane": "crane",
         "devshell": "devshell",
+        "flake-compat": "flake-compat",
         "flake-parts": "flake-parts",
         "nixpkgs": "nixpkgs",
         "treefmt-nix": "treefmt-nix"

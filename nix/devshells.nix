@@ -22,6 +22,11 @@ in {
 
   commands = [
     {package = inputs.self.formatter.${pkgs.system};}
+    {
+      name = "cardano-node";
+      package = inputs.self.internal.${pkgs.system}.cardano-node;
+    }
+    {package = config.language.rust.packageSet.cargo;}
   ];
 
   language.c.compiler =
