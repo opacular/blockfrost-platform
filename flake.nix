@@ -46,6 +46,7 @@
           projectRootFile = "flake.nix";
           programs.alejandra.enable = true;
           programs.rustfmt.enable = true;
+          programs.yamlfmt.enable = true;
         };
       };
     });

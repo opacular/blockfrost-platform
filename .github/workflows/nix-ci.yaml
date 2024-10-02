@@ -1,0 +1,33 @@
+name: Nix
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+jobs:
+  build:
+    name: CI
+    runs-on: ${{ matrix.os }}
+    permissions:
+      id-token: "write"
+      contents: "read"
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            targetSystem: x86_64-linux
+          - os: macos-12
+            targetSystem: x86_64-darwin
+          - os: macos-14
+            targetSystem: aarch64-darwin
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+      - uses: DeterminateSystems/magic-nix-cache-action@main
+      - uses: DeterminateSystems/flake-checker-action@main
+      - name: Check the repository
+        run: nix flake check --show-trace --print-build-logs
+      - name: Build the package
+        run: nix build --show-trace --print-build-logs .#packages.${{ matrix.targetSystem }}.default
+      - name: Build the devshell
+        run: nix build --show-trace --print-build-logs .#devShells.${{ matrix.targetSystem }}.default

@@ -1,11 +1,8 @@
 name: Continuous Integration
-
 on:
   push:
-
 env:
   CARGO_TERM_COLOR: always
-
 jobs:
   build_and_test:
     name: CI
@@ -18,30 +15,23 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
       - name: Install Rust toolchain
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain: ${{ matrix.rust }}
           components: rustfmt, rust-src, clippy
-
       - name: Build
         run: cargo build --release --verbose
-
       - name: Test
         run: cargo test --verbose
-
       - name: Check formatting
         run: cargo fmt --all -- --check
-
       - name: Lint with Clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
-
       - name: Package binaries
         run: |
           mkdir -p artifacts
           cp target/release/blockfrost-platform* artifacts/
-
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
