@@ -37,4 +37,33 @@ in rec {
     // {
       inherit cargoArtifacts;
     });
+
+  cardano-node-flake = let
+    unpatched = inputs.cardano-node;
+  in
+    (import inputs.flake-compat {
+      src =
+        if targetSystem != "aarch64-darwin"
+        then unpatched
+        else {
+          outPath = toString (pkgs.runCommand "source" {} ''
+            cp -r ${unpatched} $out
+            chmod -R +w $out
+            cd $out
+            echo ${lib.escapeShellArg (builtins.toJSON [targetSystem])} $out/nix/supported-systems.nix
+          '');
+          inherit (unpatched) rev shortRev lastModified lastModifiedDate;
+        };
+    })
+    .defaultNix;
+
+  cardano-node-packages =
+    {
+      x86_64-linux = cardano-node-flake.hydraJobs.x86_64-linux.musl;
+      x86_64-darwin = cardano-node-flake.packages.x86_64-darwin;
+      aarch64-darwin = cardano-node-flake.packages.aarch64-darwin;
+    }
+    .${targetSystem};
+
+  inherit (cardano-node-packages) cardano-node;
 }
