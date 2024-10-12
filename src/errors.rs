@@ -58,6 +58,12 @@ impl From<pallas_network::miniprotocols::txsubmission::Error> for BlockfrostErro
     }
 }
 
+impl From<pallas_network::miniprotocols::handshake::Error> for BlockfrostError {
+    fn from(err: pallas_network::miniprotocols::handshake::Error) -> Self {
+        BlockfrostError::internal_server_error(format!("CardanoNodeHandshakeError: {}", err))
+    }
+}
+
 impl From<TryFromSliceError> for BlockfrostError {
     fn from(err: TryFromSliceError) -> Self {
         BlockfrostError::internal_server_error(format!("Hash conversion failed: {}", err))
