@@ -12,7 +12,7 @@ pub async fn route(
     validate_content_type(&headers, &["application/cbor"])?;
 
     // Submit transaction
-    let mut node = node.write().await;
+    let node = node.write().await;
     let response = node.submit_transaction(body).await;
 
     Ok(Json(response))

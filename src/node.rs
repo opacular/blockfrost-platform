@@ -1,77 +1,68 @@
-use crate::errors::{AppError, BlockfrostError};
+use crate::errors::BlockfrostError;
 use axum::body::Bytes;
 use pallas_crypto::hash::Hasher;
 use pallas_network::{
     facades::NodeClient,
-    miniprotocols::{
-        handshake::{self, Confirmation},
-        localtxsubmission::{EraTx, Response},
-    },
+    miniprotocols::localtxsubmission::{EraTx, Response},
 };
 use tracing::{info, warn};
 
 pub struct Node {
-    client: NodeClient,
     network_magic: u64,
+    socket: String,
 }
 
 impl Node {
     /// Creates a new `Node` instance
-    pub async fn new(socket: &str, network_magic: u64) -> Result<Node, AppError> {
-        info!("Connecting to node socket {} ...", socket);
-
-        let client = NodeClient::connect(socket, network_magic).await?;
-
-        info!("Connection to node was successfully established.");
-        Ok(Node {
-            client,
+    pub fn new(socket: &str, network_magic: u64) -> Self {
+        Self {
+            socket: socket.to_string(),
             network_magic,
-        })
+        }
     }
 
-    /// Submits a transaction to the connected Cardano node.
-    pub async fn submit_transaction(&mut self, tx: Bytes) -> Result<String, BlockfrostError> {
-        info!("Submitting transaction to node.");
+    /// Establishes a new NodeClient connection.
+    async fn connect(&self) -> Result<NodeClient, BlockfrostError> {
+        info!("Connecting to node socket {} ...", self.socket);
 
-        let tx_vec = tx.to_vec();
-        let txid = hex::encode(Hasher::<256>::hash_cbor(&tx_vec));
-        let era_tx = EraTx(6, tx_vec);
-
-        match self.client.submission().submit_tx(era_tx).await? {
-            Response::Accepted => Ok(txid),
-            Response::Rejected(reason) => {
-                warn!("Transaction was rejected: {}", hex::encode(&reason.0));
-
-                Err(BlockfrostError::custom_400(format!(
-                    "Transaction was rejected: {}",
-                    hex::encode(&reason.0)
-                )))
+        match NodeClient::connect(&self.socket, self.network_magic).await {
+            Ok(client) => {
+                info!("Connection to node was successfully established.");
+                Ok(client)
+            }
+            Err(e) => {
+                warn!("Failed to connect to node: {:?}", e);
+                Err(BlockfrostError::custom_400(e.to_string()))
             }
         }
     }
 
-    // Gets the node version from the connected Cardano node.
-    pub async fn version(&mut self) -> Result<String, BlockfrostError> {
-        info!("Getting version of the node.");
+    /// Submits a transaction to the connected Cardano node.
+    pub async fn submit_transaction(&self, tx: Bytes) -> Result<String, BlockfrostError> {
+        let tx_vec = tx.to_vec();
+        let txid = hex::encode(Hasher::<256>::hash_cbor(&tx_vec));
 
-        let versions = handshake::n2c::VersionTable::v10_and_above(self.network_magic);
+        let era_tx = EraTx(6, tx_vec);
 
-        // Perform the handshake and retrieve the node version in one step
-        let confirmation = self.client.handshake().handshake(versions).await?;
+        // Connect to the node
+        let mut client = self.connect().await?;
+        let submission_client = client.submission();
 
-        // Extract the node version after successful handshake
-        match confirmation {
-            Confirmation::Accepted(handshake_version, _version_data) => {
-                info!("Node version: {:?}", handshake_version);
-                Ok(format!("{:?}", handshake_version)) // Convert version to string format
+        // Submit the transaction
+        match submission_client.submit_tx(era_tx).await {
+            Ok(Response::Accepted) => {
+                info!("Transaction accepted by the node.");
+                Ok(txid)
             }
-            Confirmation::Rejected(reason) => Err(BlockfrostError::internal_server_error(format!(
-                "Failed to get the version: {:?}",
-                &reason
-            ))),
-            Confirmation::QueryReply(_) => Err(BlockfrostError::internal_server_error(
-                "Failed to get the version".to_string(),
-            )),
+            Ok(Response::Rejected(reason)) => {
+                let reason_hex = hex::encode(&reason.0);
+                warn!("Transaction was rejected: {}", reason_hex);
+                Err(BlockfrostError::custom_400(reason_hex))
+            }
+            Err(e) => {
+                warn!("Error during transaction submission: {:?}", e);
+                Err(BlockfrostError::custom_400(e.to_string()))
+            }
         }
     }
 }
