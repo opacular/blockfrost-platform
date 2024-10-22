@@ -4,6 +4,7 @@
   ...
 }: let
   inherit (pkgs) lib;
+  internal = inputs.self.internal.${pkgs.system};
 in {
   name = "blockfrost-platform-devshell";
 
@@ -24,16 +25,29 @@ in {
     {package = inputs.self.formatter.${pkgs.system};}
     {
       name = "cardano-node";
-      package = inputs.self.internal.${pkgs.system}.cardano-node;
+      package = internal.cardano-node;
+    }
+    {
+      name = "cardano-cli";
+      package = internal.cardano-cli;
     }
     {package = config.language.rust.packageSet.cargo;}
+    {package = pkgs.rust-analyzer;}
+    {
+      category = "handy";
+      package = internal.runNode "preview";
+    }
+    {
+      category = "handy";
+      package = internal.runNode "preprod";
+    }
   ];
 
   language.c.compiler =
     if pkgs.stdenv.isLinux
     then pkgs.gcc
     else pkgs.clang;
-  language.c.includes = inputs.self.internal.${pkgs.system}.commonArgs.buildInputs;
+  language.c.includes = internal.commonArgs.buildInputs;
 
   devshell.motd = ''
 
@@ -41,5 +55,9 @@ in {
     $(menu)
 
     You can now run ‘{bold}cargo run{reset}’.
+  '';
+
+  devshell.startup.symlink-configs.text = ''
+    ln -sfn ${internal.cardano-node-configs} $PRJ_ROOT/cardano-node-configs
   '';
 }

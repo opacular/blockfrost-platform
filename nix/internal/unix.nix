@@ -65,5 +65,28 @@ in rec {
     }
     .${targetSystem};
 
-  inherit (cardano-node-packages) cardano-node;
+  inherit (cardano-node-packages) cardano-node cardano-cli;
+
+  cardano-node-configs = builtins.path {
+    name = "cardano-playground-configs";
+    path = inputs.cardano-playground + "/static/book.play.dev.cardano.org/environments";
+  };
+
+  runNode = network: let
+    stateDir =
+      if pkgs.stdenv.isDarwin
+      then "Library/Application Support/blockfrost-platform/${network}"
+      else ".local/share/blockfrost-platform/${network}";
+  in
+    pkgs.writeShellScriptBin "run-node-${network}" ''
+      stateDir="$HOME"/${lib.escapeShellArg stateDir}
+      mkdir -p "$stateDir"
+      set -x
+      exec ${lib.getExe cardano-node} run \
+        --config ${cardano-node-configs}/${network}/config.json \
+        --topology ${cardano-node-configs}/${network}/topology.json \
+        --socket-path "$stateDir"/node.socket \
+        --database-path "$stateDir"/chain
+    ''
+    // {meta.description = "Runs cardano-node on ${network}";};
 }
