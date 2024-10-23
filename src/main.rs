@@ -6,6 +6,7 @@ mod icebreakers_api;
 mod middlewares;
 mod node;
 
+use api::metrics::setup_metrics_recorder;
 use api::root;
 use api::tx;
 use axum::extract::Request;
@@ -19,6 +20,7 @@ use cli::Config;
 use errors::AppError;
 use errors::BlockfrostError;
 use middlewares::errors::error_middleware;
+use middlewares::metrics::track_http_metrics;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tower::ServiceBuilder;
@@ -51,9 +53,14 @@ async fn main() -> Result<(), AppError> {
         icebreakers_api::IcebreakersAPI::new(&config).await?,
     ));
 
+    let prometheus_handle = Arc::new(RwLock::new(setup_metrics_recorder()));
+
     let app = Router::new()
         .route("/", get(root::route))
         .route("/tx/submit", post(tx::submit::route))
+        .route_layer(from_fn(track_http_metrics))
+        .route("/metrics", get(api::metrics::route))
+        .layer(Extension(prometheus_handle))
         .layer(Extension(node))
         .layer(Extension(icebreakers_api))
         .layer(from_fn(error_middleware))
