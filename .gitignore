@@ -26,3 +26,12 @@ result-*
 .direnv/
 
 /cardano-node-configs
+
+# Ignore IDE specific files
+# Visual Studio Code
+.vscode/
+*.code-workspace
+
+# JetBrains IDEs (IntelliJ, CLion, etc.)
+.idea/
+*.iml

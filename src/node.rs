@@ -1,4 +1,5 @@
 use crate::errors::BlockfrostError;
+use metrics::gauge;
 use pallas_crypto::hash::Hasher;
 use pallas_network::{
     facades::NodeClient,
@@ -23,14 +24,17 @@ impl Node {
     /// Establishes a new NodeClient connection.
     async fn connect(&self) -> Result<NodeClient, BlockfrostError> {
         info!("Connecting to node socket {} ...", self.socket);
+        let node_gauge = gauge!("cardano_node_connected");
 
         match NodeClient::connect(&self.socket, self.network_magic).await {
             Ok(client) => {
                 info!("Connection to node was successfully established.");
+                node_gauge.set(1);
                 Ok(client)
             }
             Err(e) => {
                 warn!("Failed to connect to node: {:?}", e);
+                node_gauge.set(0);
                 Err(BlockfrostError::custom_400(e.to_string()))
             }
         }
