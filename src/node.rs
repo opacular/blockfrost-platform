@@ -1,5 +1,4 @@
 use crate::errors::BlockfrostError;
-use axum::body::Bytes;
 use pallas_crypto::hash::Hasher;
 use pallas_network::{
     facades::NodeClient,
@@ -38,11 +37,11 @@ impl Node {
     }
 
     /// Submits a transaction to the connected Cardano node.
-    pub async fn submit_transaction(&self, tx: Bytes) -> Result<String, BlockfrostError> {
-        let tx_vec = tx.to_vec();
-        let txid = hex::encode(Hasher::<256>::hash_cbor(&tx_vec));
+    pub async fn submit_transaction(&self, tx: String) -> Result<String, BlockfrostError> {
+        let tx = hex::decode(tx).map_err(|e| BlockfrostError::custom_400(e.to_string()))?;
+        let txid = hex::encode(Hasher::<256>::hash_cbor(&tx));
 
-        let era_tx = EraTx(6, tx_vec);
+        let era_tx = EraTx(6, tx);
 
         // Connect to the node
         let mut client = self.connect().await?;
