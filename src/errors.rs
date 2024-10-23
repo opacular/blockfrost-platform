@@ -64,6 +64,12 @@ impl From<pallas_network::miniprotocols::handshake::Error> for BlockfrostError {
     }
 }
 
+impl From<pallas_network::miniprotocols::localstate::ClientError> for BlockfrostError {
+    fn from(err: pallas_network::miniprotocols::localstate::ClientError) -> Self {
+        BlockfrostError::internal_server_error(format!("localstate::ClientError: {}", err))
+    }
+}
+
 impl From<TryFromSliceError> for BlockfrostError {
     fn from(err: TryFromSliceError) -> Self {
         BlockfrostError::internal_server_error(format!("Hash conversion failed: {}", err))
