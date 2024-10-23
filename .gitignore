@@ -24,3 +24,5 @@ result-*
 
 # direnv
 .direnv/
+
+/cardano-node-configs

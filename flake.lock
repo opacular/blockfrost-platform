@@ -17,6 +17,23 @@
         "type": "github"
       }
     },
+    "cardano-playground": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1727295084,
+        "narHash": "sha256-FaeJYpwKUHqggb9OeVoLgeXK/rw3JzRpsM28MnQcmkI=",
+        "owner": "input-output-hk",
+        "repo": "cardano-playground",
+        "rev": "b4f47fd78beec0ea1ed880d6f0b794919e0c0463",
+        "type": "github"
+      },
+      "original": {
+        "owner": "input-output-hk",
+        "repo": "cardano-playground",
+        "rev": "b4f47fd78beec0ea1ed880d6f0b794919e0c0463",
+        "type": "github"
+      }
+    },
     "crane": {
       "locked": {
         "lastModified": 1727316705,
@@ -117,6 +134,7 @@
     "root": {
       "inputs": {
         "cardano-node": "cardano-node",
+        "cardano-playground": "cardano-playground",
         "crane": "crane",
         "devshell": "devshell",
         "flake-compat": "flake-compat",

@@ -11,6 +11,8 @@
     cardano-node.flake = false; # otherwise, +2k dependencies we don’t really use
     devshell.url = "github:numtide/devshell";
     devshell.inputs.nixpkgs.follows = "nixpkgs";
+    cardano-playground.url = "github:input-output-hk/cardano-playground/b4f47fd78beec0ea1ed880d6f0b794919e0c0463";
+    cardano-playground.flake = false; # otherwise, +9k dependencies in flake.lock…
   };
 
   outputs = inputs:
