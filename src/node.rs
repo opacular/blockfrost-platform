@@ -50,7 +50,7 @@ impl Node {
         // Submit the transaction
         match submission_client.submit_tx(era_tx).await {
             Ok(Response::Accepted) => {
-                info!("Transaction accepted by the node.");
+                info!("Transaction accepted by the node {}", txid);
                 Ok(txid)
             }
             Ok(Response::Rejected(reason)) => {

@@ -29,10 +29,14 @@ jobs:
       - name: Lint with Clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
       - name: Package binaries
+        # TODO: find a better way to trigger this only on master branch or manually
+        if: github.ref == 'refs/heads/master'
         run: |
           mkdir -p artifacts
           cp target/release/blockfrost-platform* artifacts/
       - name: Upload artifacts
+        # TODO: find a better way to trigger this only on master branch or manually
+        if: github.ref == 'refs/heads/master'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ runner.os }}-binary
