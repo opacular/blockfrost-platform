@@ -1,6 +1,13 @@
 name: Continuous Integration
 on:
   push:
+  workflow_dispatch:
+    inputs:
+      upload_artifacts:
+        description: 'Upload artifacts'
+        type: boolean
+        required: true
+        default: true
 env:
   CARGO_TERM_COLOR: always
 jobs:
@@ -29,14 +36,12 @@ jobs:
       - name: Lint with Clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
       - name: Package binaries
-        # TODO: find a better way to trigger this only on master branch or manually
-        if: github.ref == 'refs/heads/master'
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.upload_artifacts == 'true'
         run: |
           mkdir -p artifacts
           cp target/release/blockfrost-platform* artifacts/
       - name: Upload artifacts
-        # TODO: find a better way to trigger this only on master branch or manually
-        if: github.ref == 'refs/heads/master'
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.upload_artifacts == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ runner.os }}-binary
