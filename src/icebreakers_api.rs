@@ -1,7 +1,8 @@
 use crate::{cli::Config, errors::AppError};
 use reqwest::Client;
+use serde::Deserialize;
 use serde_json::json;
-use tracing::{error, info};
+use tracing::info;
 
 pub struct IcebreakersAPI {
     client: Client,
@@ -10,6 +11,12 @@ pub struct IcebreakersAPI {
     mode: String,
     port: u16,
     reward_address: String,
+}
+
+#[derive(Deserialize)]
+struct ErrorResponse {
+    reason: String,
+    details: String,
 }
 
 const API_DEV_URL: &str = "https://api-dev.icebreakers.blockfrost.io";
@@ -32,12 +39,10 @@ impl IcebreakersAPI {
             reward_address: config.reward_address.clone(),
         };
 
-        // Register with Icebreakers API
         if let Err(e) = icebreakers_api.register().await {
-            error!("Failed to register with Icebreakers API: {}", e);
             return Err(e);
         } else {
-            // info!("Successfully registered with Icebreakers API.");
+            info!("Successfully registered with Icebreakers API.");
         }
 
         Ok(icebreakers_api)
@@ -45,7 +50,7 @@ impl IcebreakersAPI {
 
     /// Registers with the Icebreakers API
     pub async fn register(&self) -> Result<(), AppError> {
-        info!("Skipping registering with Icebreakers API...");
+        info!("Registering with icebreakers api...");
 
         let url = format!("{}/register", self.base_url);
         let body = json!({
@@ -61,19 +66,19 @@ impl IcebreakersAPI {
             .json(&body)
             .send()
             .await
-            .map_err(|e| AppError::Registration(format!("Request failed: {}", e)))?;
+            .map_err(|e| AppError::Registration(format!("Registering failed: {}", e)))?;
 
         if response.status().is_success() {
             Ok(())
         } else {
-            // let status = response.status();
-            // let error_text = response.text().await.unwrap_or_default();
+            let error_response = response.json::<ErrorResponse>().await.map_err(|e| {
+                AppError::Registration(format!("Failed to parse error response: {}", e))
+            })?;
 
-            Ok(())
-            // Err(AppError::RegistrationError(format!(
-            //     "Failed with status {}: {}",
-            //     status, error_text
-            // )))
+            Err(AppError::Registration(format!(
+                "Failed to register with Icebreakers API: {} details: {}",
+                error_response.reason, error_response.details
+            )))
         }
     }
 }
