@@ -47,11 +47,17 @@
 
         devshells.default = import ./nix/devshells.nix {inherit inputs;};
 
-        treefmt = {
+        treefmt = {pkgs, ...}: {
           projectRootFile = "flake.nix";
           programs.alejandra.enable = true;
           programs.rustfmt.enable = true;
           programs.yamlfmt.enable = true;
+          programs.toml-sort.enable = true;
+          settings.formatter.dockfmt = {
+            command = pkgs.dockfmt;
+            options = ["fmt" "--write"];
+            includes = ["Dockerfile"];
+          };
         };
       };
     });

@@ -1,0 +1,22 @@
+services:
+  cardano-node:
+    image: ghcr.io/intersectmbo/cardano-node:9.2.0
+    environment:
+      - NETWORK=$NETWORK
+    volumes:
+      - node-db:/data
+      - node-ipc:/ipc
+    restart: on-failure
+  blockfrost-platform:
+    build:
+      context: ./
+    init: true
+    restart: on-failure
+    ports:
+      - 3000:3000
+    volumes:
+      - node-ipc:/ipc
+    entrypoint: ["sh", "-c", "blockfrost-platform --network $NETWORK --secret $SECRET --reward-address $REWARD_ADDRESS --node-socket-path /ipc/node.socket"]
+volumes:
+  node-db:
+  node-ipc:
