@@ -81,3 +81,8 @@ async fn main() -> Result<(), AppError> {
 
     Ok(())
 }
+
+// This is a workaround for the malloc performance issues under heavy multi-threaded load for builds targetting musl, i.e. Alpine Linux
+#[cfg(target_env = "musl")]
+#[global_allocator]
+static GLOBAL: jemalloc::Jemalloc = jemalloc::Jemalloc;
