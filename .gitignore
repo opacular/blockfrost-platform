@@ -24,6 +24,7 @@ result-*
 
 # direnv
 .direnv/
+.envrc.local
 
 /cardano-node-configs
 

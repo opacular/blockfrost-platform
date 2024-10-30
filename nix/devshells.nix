@@ -14,7 +14,8 @@ in {
   ];
 
   devshell.packages =
-    lib.optionals pkgs.stdenv.isLinux [
+    [pkgs.unixtools.xxd]
+    ++ lib.optionals pkgs.stdenv.isLinux [
       pkgs.pkg-config
     ]
     ++ lib.optionals pkgs.stdenv.isDarwin [
@@ -31,6 +32,10 @@ in {
       name = "cardano-cli";
       package = internal.cardano-cli;
     }
+    {
+      name = "cardano-address";
+      package = internal.cardano-address;
+    }
     {package = config.language.rust.packageSet.cargo;}
     {package = pkgs.rust-analyzer;}
     {
@@ -40,6 +45,10 @@ in {
     {
       category = "handy";
       package = internal.runNode "preprod";
+    }
+    {
+      category = "handy";
+      package = internal.tx-build;
     }
   ];
 

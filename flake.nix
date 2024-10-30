@@ -53,6 +53,7 @@
           programs.rustfmt.enable = true;
           programs.yamlfmt.enable = true;
           programs.toml-sort.enable = true;
+          programs.shfmt.enable = true;
           settings.formatter.dockfmt = {
             command = pkgs.dockfmt;
             options = ["fmt" "--write"];

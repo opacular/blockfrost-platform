@@ -72,14 +72,14 @@ in rec {
     path = inputs.cardano-playground + "/static/book.play.dev.cardano.org/environments";
   };
 
-  runNode = network: let
-    stateDir =
-      if pkgs.stdenv.isDarwin
-      then "Library/Application Support/blockfrost-platform/${network}"
-      else ".local/share/blockfrost-platform/${network}";
-  in
+  stateDir =
+    if pkgs.stdenv.isDarwin
+    then "Library/Application Support/blockfrost-platform"
+    else ".local/share/blockfrost-platform";
+
+  runNode = network:
     pkgs.writeShellScriptBin "run-node-${network}" ''
-      stateDir="$HOME"/${lib.escapeShellArg stateDir}
+      stateDir="$HOME"/${lib.escapeShellArg (stateDir + "/" + network)}
       mkdir -p "$stateDir"
       set -x
       exec ${lib.getExe cardano-node} run \
@@ -89,4 +89,63 @@ in rec {
         --database-path "$stateDir"/chain
     ''
     // {meta.description = "Runs cardano-node on ${network}";};
+
+  # For generating a signing key from a recovery phrase. It’s a little
+  # controversial to download a binary, but we only need it for the devshell. If
+  # needed, we can use the source instead.
+  cardano-address = let
+    release = "v2024-09-29";
+    baseUrl = "https://github.com/cardano-foundation/cardano-wallet/releases/download/${release}/cardano-wallet";
+    archive = pkgs.fetchzip {
+      name = "cardano-wallet-${release}";
+      url =
+        {
+          "x86_64-linux" = "${baseUrl}-${release}-linux64.tar.gz";
+          "x86_64-darwin" = "${baseUrl}-${release}-macos-intel.tar.gz";
+          "aarch64-darwin" = "${baseUrl}-${release}-macos-silicon.tar.gz";
+        }
+        .${targetSystem};
+      hash =
+        {
+          "x86_64-linux" = "sha256-EOe6ooqvSGylJMJnWbqDrUIVYzwTCw5Up/vU/gPK6tE=";
+          "x86_64-darwin" = "sha256-POUj3Loo8o7lBI4CniaA/Z9mTRAmWv9VWAdtcIMe27I=";
+          "aarch64-darwin" = "sha256-+6bzdUXnJ+nnYdZuhLueT0+bYmXzwDXTe9JqWrWnfe4=";
+        }
+        .${targetSystem};
+    };
+  in
+    pkgs.runCommandNoCC "cardano-address" {
+      meta.description = "Command-line for address and key manipulation in Cardano";
+    } ''
+      mkdir -p $out/bin $out/libexec
+      cp ${archive}/cardano-address $out/libexec/
+      ${lib.optionalString pkgs.stdenv.isDarwin ''
+        cp ${archive}/{libz,libiconv.2,libgmp.10,libffi.8}.dylib $out/libexec
+      ''}
+      ln -sf $out/libexec/cardano-address $out/bin/
+    '';
+
+  tx-build = let
+    onPath = with pkgs; [
+      bash
+      coreutils
+      gnused
+      gnugrep
+      jq
+      bc
+      cardano-cli
+      cardano-address
+    ];
+  in
+    pkgs.writeShellScriptBin "tx-build" ''
+      set -euo pipefail
+      export PATH=${lib.escapeShellArg (lib.makeBinPath onPath)}:"$PATH"
+      if [ -z "''${CARDANO_NODE_SOCKET_PATH:-}" ] ; then
+        if [[ "''${1:-}" =~ ^(preview|preprod|mainnet)$ ]]; then
+          export CARDANO_NODE_SOCKET_PATH="$HOME"/${lib.escapeShellArg stateDir}/"$1"/node.socket
+        fi
+      fi
+      exec ${./tx-build.sh} "$@"
+    ''
+    // {meta.description = "Builds a CBOR transaction for testing ‘/tx/submit’";};
 }
