@@ -25,7 +25,10 @@ pub fn setup_metrics_recorder() -> PrometheusHandle {
         "HTTP calls made to blockfrost-platform API"
     );
 
-    describe_gauge!("cardano_node_connected", "Cardano node connection status");
+    describe_gauge!(
+        "cardano_node_connections",
+        "Number of currently open Cardano node N2C connections"
+    );
 
     builder
 }
