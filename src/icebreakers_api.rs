@@ -19,7 +19,8 @@ struct ErrorResponse {
     details: String,
 }
 
-const API_DEV_URL: &str = "https://api-dev.icebreakers.blockfrost.io";
+const API_URL: &str = "https://api-dev.icebreakers.blockfrost.io";
+// const API_URL: &str = "http://localhost:3000";
 // const API_URL: &str = "https://icebreakers-api.blockfrost.io";
 
 impl IcebreakersAPI {
@@ -28,7 +29,7 @@ impl IcebreakersAPI {
         info!("Connecting to Icebreakers API...");
 
         let client = Client::new();
-        let base_url = API_DEV_URL.to_string();
+        let base_url = API_URL.to_string();
 
         let icebreakers_api = IcebreakersAPI {
             client,
