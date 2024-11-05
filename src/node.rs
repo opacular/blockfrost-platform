@@ -76,12 +76,9 @@ impl Node {
     }
 
     pub async fn sync_progress(&mut self) -> Result<SyncProgress, BlockfrostError> {
-        let mut client = self.connect().await?;
-        let generic_client = client.statequery();
-
-        generic_client.acquire(None).await?;
-
-        let result = {
+        async fn action(
+            generic_client: &mut localstate::GenericClient,
+        ) -> Result<SyncProgress, BlockfrostError> {
             let current_era = localstate::queries_v16::get_current_era(generic_client).await?;
 
             let epoch =
@@ -180,9 +177,19 @@ impl Node {
                 slot,
                 block,
             })
-        };
+        }
 
-        // Always release the client, even if an error occurs
+        // Connect to the node
+        let mut client = self.connect().await?;
+        let generic_client = client.statequery();
+
+        // Acquire the client
+        generic_client.acquire(None).await?;
+
+        // Run the action and ensure the client is released afterward
+        let result = action(generic_client).await;
+
+        // Always release the client, even if action fails
         if let Err(e) = generic_client.send_release().await {
             warn!("Failed to release client: {:?}", e);
         }
