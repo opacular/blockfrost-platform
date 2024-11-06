@@ -119,6 +119,15 @@ impl NodeConn {
         result
     }
 
+    /// Pings the node, e.g. to see if the connection is still alive.
+    pub async fn ping(&mut self) -> Result<(), BlockfrostError> {
+        // FIXME: we should be able to use `miniprotocols::keepalive`
+        // (cardano-cli does), but for some reason it’s not added to
+        // `NodeClient`? Let’s try to acquire a local state client instead:
+
+        self.with_statequery(|_| Box::pin(async { Ok(()) })).await
+    }
+
     /// Reports the sync progress of the node.
     pub async fn sync_progress(&mut self) -> Result<SyncProgress, BlockfrostError> {
         async fn action(
@@ -250,22 +259,26 @@ impl deadpool::managed::Manager for NodeConnPoolManager {
     type Error = AppError;
 
     async fn create(&self) -> Result<NodeConn, AppError> {
-        info!("Connecting to node N2C socket {} ...", self.socket_path);
-
         // TODO: maybe use `ExponentialBackoff` from `tokio-retry`, to have at
         // least _some_ debouncing between requests, if the node is down?
         match pallas_network::facades::NodeClient::connect(&self.socket_path, self.network_magic)
             .await
         {
             Ok(conn) => {
-                info!("N2C connection to node was successfully established");
+                info!(
+                    "N2C connection to node was successfully established at socket: {}",
+                    self.socket_path
+                );
                 gauge!("cardano_node_connections").increment(1);
                 Ok(NodeConn {
                     underlying: Some(conn),
                 })
             }
             Err(err) => {
-                warn!("Failed to connect to node: {:?}", err);
+                error!(
+                    "Failed to connect to a N2C node socket: {}: {:?}",
+                    self.socket_path, err
+                );
                 Err(AppError::Node(err.to_string()))
             }
         }
@@ -282,40 +295,26 @@ impl deadpool::managed::Manager for NodeConnPoolManager {
         conn: &mut NodeConn,
         metrics: &deadpool::managed::Metrics,
     ) -> deadpool::managed::RecycleResult<AppError> {
-        // Take ownership of the `NodeClient` from Pallas
-        if let Some(mut owned) = conn.underlying.take() {
-            // Check if the connection is still viable
-            //
-            // FIXME: we should be able to use `miniprotocols::keepalive`
-            // (cardano-cli does), but for some reason it’s not added to
-            // `NodeClient`? Let’s try to acquire a local state client instead:
-            let client = owned.statequery();
-
-            match client.acquire(None).await {
-                Ok(()) => {
-                    drop(client.send_release().await);
-                    // Put the `NodeClient` back into our wrapper
-                    conn.underlying = Some(owned);
-                    Ok(())
-                }
-                Err(err) => {
-                    error!(
-                        "N2C connection no longer viable: {}, {}, {:?}",
-                        self.socket_path, err, metrics
-                    );
-                    gauge!("cardano_node_connections").decrement(1);
-                    // Now call `abort` to clean up their resources:
-                    owned.abort().await;
-                    // And scrap the connection from the pool:
-                    Err(deadpool::managed::RecycleError::Backend(AppError::Node(
-                        err.to_string(),
-                    )))
-                }
+        // Check if the connection is still viable
+        match conn.ping().await {
+            Ok(_) => Ok(()),
+            Err(err) => {
+                error!(
+                    "N2C connection no longer viable: {}, {}, {:?}",
+                    self.socket_path, err, metrics
+                );
+                // Take ownership of the `NodeClient` from Pallas
+                let owned = conn.underlying.take().unwrap();
+                // This is the only moment when `underlying` becomes `None`. But
+                // it will never be used again.
+                gauge!("cardano_node_connections").decrement(1);
+                // Now call `abort` to clean up their resources:
+                owned.abort().await;
+                // And scrap the connection from the pool:
+                Err(deadpool::managed::RecycleError::Backend(AppError::Node(
+                    err.to_string(),
+                )))
             }
-        } else {
-            Err(deadpool::managed::RecycleError::Backend(AppError::Node(
-                "deadpool called recycle twice, it never happens".to_string(),
-            )))
         }
     }
 }

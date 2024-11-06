@@ -25,7 +25,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tower::ServiceBuilder;
 use tower_http::normalize_path::NormalizePathLayer;
-use tracing::info;
+use tracing::{error, info};
 use tracing_subscriber::fmt::format::Format;
 
 #[tokio::main]
@@ -64,7 +64,7 @@ async fn main() -> Result<(), AppError> {
         .route_layer(from_fn(track_http_metrics))
         .route("/metrics", get(api::metrics::route))
         .layer(Extension(prometheus_handle))
-        .layer(Extension(node_conn_pool))
+        .layer(Extension(node_conn_pool.clone()))
         .layer(Extension(icebreakers_api))
         .layer(from_fn(error_middleware))
         .fallback(BlockfrostError::not_found());
@@ -80,9 +80,26 @@ async fn main() -> Result<(), AppError> {
     info!("Log level {}", config.log_level);
     info!("Mode {}", config.mode);
 
+    tokio::spawn(node_health_check_task(node_conn_pool));
+
     axum::serve(listener, ServiceExt::<Request>::into_make_service(app)).await?;
 
     Ok(())
+}
+
+async fn node_health_check_task(node: node::NodeConnPool) {
+    loop {
+        // It’s enough to get a working connection from the pool, because it’s being checked then.
+        let health = node.get().await.map(drop).inspect_err(|err| {
+            error!(
+                "Health check: cannot get a working N2C connection from the pool: {:?}",
+                err
+            )
+        });
+
+        let delay = tokio::time::Duration::from_secs(if health.is_ok() { 10 } else { 2 });
+        tokio::time::sleep(delay).await;
+    }
 }
 
 // This is a workaround for the malloc performance issues under heavy multi-threaded load for builds targetting musl, i.e. Alpine Linux

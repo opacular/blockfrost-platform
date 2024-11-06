@@ -1,6 +1,6 @@
 use axum::response::{Extension, IntoResponse};
 
-use metrics::{describe_counter, describe_gauge};
+use metrics::{describe_counter, describe_gauge, gauge};
 use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -29,6 +29,9 @@ pub fn setup_metrics_recorder() -> PrometheusHandle {
         "cardano_node_connections",
         "Number of currently open Cardano node N2C connections"
     );
+
+    // Otherwise it’s not present under `GET /metrics` if we start with a failing cardano-node:
+    gauge!("cardano_node_connections").set(0);
 
     builder
 }
