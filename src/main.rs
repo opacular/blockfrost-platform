@@ -44,10 +44,13 @@ async fn main() -> Result<(), AppError> {
         )
         .init();
 
-    let node = Arc::new(RwLock::new(node::Node::new(
+    let max_node_connections = 8;
+
+    let node_conn_pool = node::NodeConnPool::new(
+        max_node_connections,
         &config.node_socket_path,
         config.network_magic,
-    )));
+    )?;
 
     let icebreakers_api = Arc::new(RwLock::new(
         icebreakers_api::IcebreakersAPI::new(&config).await?,
@@ -61,7 +64,7 @@ async fn main() -> Result<(), AppError> {
         .route_layer(from_fn(track_http_metrics))
         .route("/metrics", get(api::metrics::route))
         .layer(Extension(prometheus_handle))
-        .layer(Extension(node))
+        .layer(Extension(node_conn_pool))
         .layer(Extension(icebreakers_api))
         .layer(from_fn(error_middleware))
         .fallback(BlockfrostError::not_found());
