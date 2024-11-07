@@ -26,11 +26,27 @@ pub struct Args {
     #[arg(short = 'm', long, default_value = "compact")]
     mode: Mode,
 
-    #[arg(short = 'e', long, required = true)]
-    secret: String,
+    /// Whether to run in solitary mode, without registering with the Icebreakers API
+    #[arg(short = 's', long)]
+    solitary: bool,
 
-    #[arg(short = 'r', long, required = true)]
-    reward_address: String,
+    #[arg(
+        short = 'e',
+        long,
+        required_unless_present("solitary"),
+        conflicts_with("solitary"),
+        requires("reward_address")
+    )]
+    secret: Option<String>,
+
+    #[arg(
+        short = 'r',
+        long,
+        required_unless_present("solitary"),
+        conflicts_with("solitary"),
+        requires("secret")
+    )]
+    reward_address: Option<String>,
 }
 
 #[derive(Debug, Clone, ValueEnum)]
@@ -62,25 +78,36 @@ pub struct Config {
     pub server_port: u16,
     pub log_level: Level,
     pub network_magic: u64,
-    pub reward_address: String,
     pub node_socket_path: String,
-    pub secret: String,
     pub mode: Mode,
+    pub icebreakers_config: Option<IcebreakersConfig>,
+}
+
+pub struct IcebreakersConfig {
+    pub reward_address: String,
+    pub secret: String,
 }
 
 impl Config {
     pub fn from_args(args: Args) -> Result<Self, AppError> {
         let network_magic = Self::get_network_magic(args.network)?;
 
+        let icebreakers_config = match (args.solitary, args.reward_address, args.secret) {
+            (false, Some(reward_address), Some(secret)) => Some(IcebreakersConfig {
+                reward_address,
+                secret,
+            }),
+            _ => None,
+        };
+
         Ok(Config {
             server_address: args.server_address,
             server_port: args.server_port,
             log_level: args.log_level.into(),
-            reward_address: args.reward_address,
             network_magic,
-            secret: args.secret,
             node_socket_path: args.node_socket_path,
             mode: args.mode,
+            icebreakers_config,
         })
     }
 

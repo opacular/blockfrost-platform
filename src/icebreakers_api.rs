@@ -26,6 +26,14 @@ const API_URL: &str = "https://api-dev.icebreakers.blockfrost.io";
 impl IcebreakersAPI {
     /// Creates a new `IcebreakersAPI` instance
     pub async fn new(config: &Config) -> Result<Self, AppError> {
+        let icebreakers_config =
+            config
+                .icebreakers_config
+                .as_ref()
+                .ok_or(AppError::Registration(
+                    "No Icebreakers config, shouldn't happen".to_string(),
+                ))?;
+
         info!("Connecting to Icebreakers API...");
 
         let client = Client::new();
@@ -34,10 +42,10 @@ impl IcebreakersAPI {
         let icebreakers_api = IcebreakersAPI {
             client,
             base_url,
-            secret: config.secret.clone(),
+            secret: icebreakers_config.secret.clone(),
             mode: config.mode.to_string(),
             port: config.server_port,
-            reward_address: config.reward_address.clone(),
+            reward_address: icebreakers_config.reward_address.clone(),
         };
 
         if let Err(e) = icebreakers_api.register().await {
