@@ -7,7 +7,7 @@
     crane.url = "github:ipetkov/crane";
     flake-compat.url = "github:input-output-hk/flake-compat";
     flake-compat.flake = false;
-    cardano-node.url = "github:IntersectMBO/cardano-node/9.2.1";
+    cardano-node.url = "github:IntersectMBO/cardano-node/10.1.2";
     cardano-node.flake = false; # otherwise, +2k dependencies we don’t really use
     devshell.url = "github:numtide/devshell";
     devshell.inputs.nixpkgs.follows = "nixpkgs";
