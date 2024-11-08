@@ -1,29 +1,25 @@
-use crate::node::{NodeConnPool, SyncProgress};
-use axum::{Extension, Json};
+use crate::{
+    errors::BlockfrostError,
+    node::{NodeConnPool, SyncProgress},
+};
+use axum::{response::IntoResponse, Extension, Json};
 use serde::Serialize;
-use tracing::error;
 
 #[derive(Serialize)]
 pub struct Response {
     pub name: String,
     pub version: String,
-    pub sync_progress: Option<SyncProgress>,
+    pub sync_progress: SyncProgress,
     pub healthy: bool,
     pub errors: Vec<String>,
 }
 
-pub async fn route(Extension(node): Extension<NodeConnPool>) -> Json<Response> {
-    let mut errors = vec![];
-
-    let sync_progress = match node.get().await {
-        Ok(mut node) => node.sync_progress().await,
-        Err(err) => Err(err),
-    }
-    .inspect_err(|err| {
-        error!("{:?}", err);
-        errors.push("Failed to determine sync_percentage".to_string());
-    })
-    .ok();
+pub async fn route(
+    Extension(node): Extension<NodeConnPool>,
+) -> Result<impl IntoResponse, BlockfrostError> {
+    let errors = vec![];
+    let mut node = node.get().await?;
+    let sync_progress = node.sync_progress().await?;
 
     let response = Response {
         name: "blockfrost-platform".to_string(),
@@ -33,5 +29,5 @@ pub async fn route(Extension(node): Extension<NodeConnPool>) -> Json<Response> {
         errors,
     };
 
-    Json(response)
+    Ok(Json(response))
 }
