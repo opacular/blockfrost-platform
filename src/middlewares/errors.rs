@@ -130,3 +130,117 @@ fn log_to_sentry(context: &str, detail: String, request_path: &str, status_code:
 
     sentry::capture_event(event);
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::middleware;
+    use axum::{
+        body::{to_bytes, Body},
+        extract::Extension,
+        http::{Request as HttpRequest, StatusCode},
+        routing::get,
+        Router,
+    };
+    use rstest::{fixture, rstest};
+    use std::sync::Arc;
+    use tower::ServiceExt;
+
+    #[derive(Clone)]
+    struct HandlerParams {
+        status_code: StatusCode,
+        body: Option<String>,
+    }
+
+    async fn test_handler(Extension(params): Extension<Arc<HandlerParams>>) -> impl IntoResponse {
+        let body = params.body.clone().unwrap_or_else(|| "".to_string());
+        Response::builder()
+            .status(params.status_code)
+            .body(Body::from(body))
+            .unwrap()
+    }
+
+    #[fixture]
+    fn request_path() -> &'static str {
+        "/test"
+    }
+
+    #[fixture]
+    fn app() -> Router {
+        Router::new()
+    }
+
+    #[rstest]
+    // Timeout -> bf internal server error user
+    #[case(
+        StatusCode::REQUEST_TIMEOUT,
+        None,
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Some(BlockfrostError::internal_server_error_user().message)
+    )]
+    // Method not allowed -> bf bad request
+    #[case(
+        StatusCode::METHOD_NOT_ALLOWED,
+        None,
+        StatusCode::BAD_REQUEST,
+        Some(BlockfrostError::method_not_allowed().message)
+    )]
+    // Success
+    #[case(StatusCode::OK, Some("Success"), StatusCode::OK, None)]
+    #[tokio::test]
+    async fn test_error_middleware(
+        #[case] handler_status: StatusCode,
+        #[case] handler_body: Option<&'static str>,
+        #[case] expected_status: StatusCode,
+        #[case] expected_error_message: Option<String>,
+        app: Router,
+        request_path: &str,
+    ) {
+        // Prepare
+        let handler_params = Arc::new(HandlerParams {
+            status_code: handler_status,
+            body: handler_body.map(|s| s.to_string()),
+        });
+
+        // Build
+        let app = app
+            .route(
+                request_path,
+                get(test_handler).layer(Extension(handler_params)),
+            )
+            .layer(middleware::from_fn(error_middleware));
+
+        // Send a request
+        let response = app
+            .oneshot(
+                HttpRequest::builder()
+                    .uri(request_path)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), expected_status);
+
+        let body_bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+
+        if let Some(expected_message) = expected_error_message {
+            // debug for test
+            // println!("expected_message {}", expected_message);
+            // println!("expected_error_message {:?}", expected_error_message);
+
+            // Parse the response as BlockfrostError
+            let error: BlockfrostError = serde_json::from_slice(&body_bytes).unwrap();
+            assert_eq!(error.message, expected_message);
+        } else {
+            // Successful response
+            let body_str = String::from_utf8(body_bytes.to_vec()).unwrap();
+            if let Some(expected_body) = handler_body {
+                assert_eq!(body_str, expected_body);
+            } else {
+                assert_eq!(body_str, "");
+            }
+        }
+    }
+}
