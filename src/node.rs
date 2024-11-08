@@ -1,14 +1,12 @@
+use crate::cbor::haskell_types::TxValidationError;
 use crate::errors::{AppError, BlockfrostError};
 use chrono::{Duration, TimeZone, Utc};
 use metrics::gauge;
+use pallas_codec::minicbor::{display, Decoder};
 use pallas_crypto::hash::Hasher;
-use pallas_network::{
-    miniprotocols,
-    miniprotocols::{
-        localstate,
-        localtxsubmission::{EraTx, Response},
-    },
-};
+use pallas_network::miniprotocols::localtxsubmission::{EraTx, Response};
+use pallas_network::multiplexer::Error;
+use pallas_network::{miniprotocols, miniprotocols::localstate};
 use pallas_traverse::wellknown;
 use std::boxed::Box;
 use std::pin::Pin;
@@ -83,13 +81,20 @@ impl NodeConn {
                 Ok(txid)
             }
             Ok(Response::Rejected(reason)) => {
-                let reason_hex = hex::encode(&reason.0);
-                warn!("Transaction was rejected: {}", reason_hex);
-                Err(BlockfrostError::custom_400(reason_hex))
+                let reason = reason.0;
+
+                let msg_res = Self::try_decode_error(&reason);
+
+                let error_message = format!("Transaction rejected with reason: {:?}", msg_res);
+
+                warn!(error_message);
+
+                Err(BlockfrostError::custom_400(error_message))
             }
             Err(e) => {
-                warn!("Error during transaction submission: {:?}", e);
-                Err(BlockfrostError::custom_400(e.to_string()))
+                let error_message = format!("Error during transaction submission: {:?}", e);
+
+                Err(BlockfrostError::custom_400(error_message))
             }
         }
     }
@@ -238,6 +243,26 @@ impl NodeConn {
         })
         .await
     }
+
+    fn try_decode_error(buffer: &[u8]) -> Result<Option<TxValidationError>, Error> {
+        let maybe_error = Decoder::new(buffer).decode();
+
+        match maybe_error {
+            Ok(error) => Ok(Some(error)),
+            Err(err) => {
+                let buffer_display = display(buffer);
+                warn!(
+                    "Failed to decode error: {:?}, buffer: {}",
+                    err, buffer_display
+                );
+
+                // Decoding failures are not errors, but some missing implementation or mis-implementations on our side.
+                // A decoding failure is a bug in our code, not a bug in the node.
+                // It should not effect the program flow, but should be logged and reported.
+                Err(Error::Decoding(err.to_string()))
+            }
+        }
+    }
 }
 
 #[derive(serde::Serialize)]
@@ -316,5 +341,20 @@ impl deadpool::managed::Manager for NodeConnPoolManager {
                 )))
             }
         }
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_try_decode_error() {
+        let buffer = [
+            130, 2, 129, 130, 6, 130, 130, 1, 130, 0, 131, 6, 27, 0, 0, 0, 2, 54, 42, 119, 48, 27,
+            0, 0, 0, 2, 83, 185, 193, 29, 130, 1, 130, 0, 131, 5, 26, 0, 2, 139, 253, 24, 173,
+        ];
+        let error = NodeConn::try_decode_error(&buffer).unwrap();
+
+        assert!(error.is_some());
     }
 }

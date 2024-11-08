@@ -1,4 +1,5 @@
 mod api;
+mod cbor;
 mod cli;
 mod common;
 mod errors;
