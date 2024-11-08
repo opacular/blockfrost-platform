@@ -8,30 +8,29 @@ use tracing::Level;
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 pub struct Args {
-    #[arg(short = 'a', long, default_value = "0.0.0.0")]
+    #[arg(long, default_value = "0.0.0.0")]
     server_address: String,
 
-    #[arg(short = 'p', long, default_value = "3000")]
+    #[arg(long, default_value = "3000")]
     server_port: u16,
 
-    #[arg(short = 'n', long, required = true)]
+    #[arg(long, required = true)]
     network: Network,
 
-    #[arg(short = 'l', long, default_value = "info")]
+    #[arg(long, default_value = "info")]
     log_level: LogLevel,
 
-    #[arg(short = 'd', long, required = true)]
+    #[arg(long, required = true)]
     node_socket_path: String,
 
-    #[arg(short = 'm', long, default_value = "compact")]
+    #[arg(long, default_value = "compact")]
     mode: Mode,
 
     /// Whether to run in solitary mode, without registering with the Icebreakers API
-    #[arg(short = 's', long)]
+    #[arg(long)]
     solitary: bool,
 
     #[arg(
-        short = 'e',
         long,
         required_unless_present("solitary"),
         conflicts_with("solitary"),
@@ -40,7 +39,6 @@ pub struct Args {
     secret: Option<String>,
 
     #[arg(
-        short = 'r',
         long,
         required_unless_present("solitary"),
         conflicts_with("solitary"),

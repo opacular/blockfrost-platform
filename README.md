@@ -37,47 +37,53 @@ blockfrost-platform [OPTIONS] --network <NETWORK> --node-address <NODE_ADDRESS> 
 
 ### Options
 
-- **`-a, --server-address <SERVER_ADDRESS>`**  
-  Default: `0.0.0.0`
+`--server-address <SERVER_ADDRESS>`
+Default: 0.0.0.0
 
-- **`-p, --server-port <SERVER_PORT>`**  
-  Default: `3000`
+`--server-port <SERVER_PORT>`
+Default: 3000
 
-- **`-n, --network <NETWORK>`**  
-  Possible values: `mainnet`, `preprod`, `preview`, `sanchonet`
+`--network <NETWORK> (required)`
+Possible values: mainnet, preprod, preview, sanchonet
 
-- **`-l, --log-level <LOG_LEVEL>`**  
-  Default: `info`  
-  Possible values: `debug`, `info`, `warn`, `error`, `trace`
+`--log-level <LOG_LEVEL>`
+Default: info
+Possible values: debug, info, warn, error, trace
 
-- **`-d, --node-address <NODE_ADDRESS>`**  
+`--node-socket-path <NODE_SOCKET_PATH> (required)`
 
-- **`-m, --mode <MODE>`**  
-  Default: `compact`  
-  Possible values: `compact`, `light`, `full`
+`--mode <MODE>`
+Default: compact
+Possible values: compact, light, full
 
-- **`-e, --secret <SECRET>`**
+`--solitary`
+Run in solitary mode, without registering with the Icebreakers API
+Conflicts with --secret and --reward-address
 
-- **`-r, --reward-address <REWARD_ADDRESS>`**
+`--secret <SECRET>`
+Required unless --solitary is present
+Conflicts with --solitary
+Requires --reward-address
 
-- **`-h, --help`**  
-  Print help
+`--reward-address <REWARD_ADDRESS>`
+Required unless --solitary is present
+Conflicts with --solitary
+Requires --secret
 
-- **`-V, --version`**  
-  Print version
-  -h, --help
-          Print help
-  -V, --version
-          Print version
+`--help`
+Print help information
+
+`--version`
+Print version information
 
 ## Devshell
 
 This repository has a [devshell](https://github.com/numtide/devshell) configured for Linux and macOS machines, both x86-64, and AArch64. To use it, please:
 
 1. Install:
-    * [Nix](https://nixos.org/download/),
-    * [direnv](https://direnv.net/),
-    * optionally: [nix-direnv](https://github.com/nix-community/nix-direnv) for a slightly better performance, if it’s easy for you to enable, e.g. on NixOS, [nix-darwin](https://github.com/LnL7/nix-darwin), using [home-manager](https://github.com/nix-community/home-manager) etc.
+   - [Nix](https://nixos.org/download/),
+   - [direnv](https://direnv.net/),
+   - optionally: [nix-direnv](https://github.com/nix-community/nix-direnv) for a slightly better performance, if it’s easy for you to enable, e.g. on NixOS, [nix-darwin](https://github.com/LnL7/nix-darwin), using [home-manager](https://github.com/nix-community/home-manager) etc.
 2. Enter the cloned directory.
 3. And run `direnv allow`.
 
@@ -99,7 +105,6 @@ docker build -t blockfrost-platform .
 
 The Docker image named `blockfrost-platform` is locally available. To run it:
 
-
 ```console
 docker run -it --init --rm \
 -p 3000:3000 \
@@ -108,22 +113,22 @@ blockfrost-platform --node-socket-path /var/run/node.socket \
 --network preview --secret my_secret --reward-address my_reward_address
 ```
 
-> **_NOTE:_**  Make sure your Cardano node socket is attached as a volume, i.e. `-v /home/user/my_node.socket:/var/run/node.socket`.
+> **_NOTE:_** Make sure your Cardano node socket is attached as a volume, i.e. `-v /home/user/my_node.socket:/var/run/node.socket`.
 
-> **_NOTE:_**  If you don't specify an IP address (i.e., `-p 3000:3000` instead of `-p 127.0.0.1:3000:3000`) when publishing a container's ports, Docker publishes the port on all interfaces (address `0.0.0.0`) by default. These ports are externally accessible.
-
+> **_NOTE:_** If you don't specify an IP address (i.e., `-p 3000:3000` instead of `-p 127.0.0.1:3000:3000`) when publishing a container's ports, Docker publishes the port on all interfaces (address `0.0.0.0`) by default. These ports are externally accessible.
 
 ### Building & running blockfrost-platform and required services
 
 The below command will build and run the `blocfrost-platform` binary, along with the Cardano node, using Docker Compose.
 
 In the root folder of the repository:
+
 ```console
 NETWORK=preview SECRET=my-secret REWARD_ADDRESS=my-reward-address docker-compose -p preview up --build
 ```
 
-> **_NOTE:_**  If you want to skip building, omit the `--build` part.
+> **_NOTE:_** If you want to skip building, omit the `--build` part.
 
-> **_NOTE:_**  Setting `-p preview` to the desired network will let you run on different networks without messing your node db. You can omit it if you plan to run on the same network always.
+> **_NOTE:_** Setting `-p preview` to the desired network will let you run on different networks without messing your node db. You can omit it if you plan to run on the same network always.
 
-> **_NOTE:_**  You don't need to provide `--node-socket-path` since it is already handled inside `docker-compose.yml`.
+> **_NOTE:_** You don't need to provide `--node-socket-path` since it is already handled inside `docker-compose.yml`.
