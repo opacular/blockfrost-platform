@@ -19,13 +19,14 @@ use cli::Args;
 use cli::Config;
 use errors::AppError;
 use errors::BlockfrostError;
+use icebreakers_api::IcebreakersAPI;
 use middlewares::errors::error_middleware;
 use middlewares::metrics::track_http_metrics;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tower::ServiceBuilder;
 use tower_http::normalize_path::NormalizePathLayer;
-use tracing::{error, info, warn};
+use tracing::{error, info};
 use tracing_subscriber::fmt::format::Format;
 
 #[tokio::main]
@@ -52,26 +53,7 @@ async fn main() -> Result<(), AppError> {
         config.network_magic,
     )?;
 
-    let icebreakers_api = match config.icebreakers_config {
-        Some(_) => Some(Arc::new(RwLock::new(
-            icebreakers_api::IcebreakersAPI::new(&config).await?,
-        ))),
-        _ => {
-            // echo "…" | cowsay -W 60 | sed -r 's/\\/\\\\/g ; s/^/warn!("/g ; s/$/");/g'
-            warn!(" __________________________________________ ");
-            warn!("/ Running in solitary mode.                \\");
-            warn!("|                                          |");
-            warn!("\\ You're not part of the Blockfrost fleet! /");
-            warn!(" ------------------------------------------ ");
-            warn!("        \\   ^__^");
-            warn!("         \\  (oo)\\_______");
-            warn!("            (__)\\       )\\/\\");
-            warn!("                ||----w |");
-            warn!("                ||     ||");
-            None
-        }
-    };
-
+    let icebreakers_api = IcebreakersAPI::new(&config).await?;
     let prometheus_handle = Arc::new(RwLock::new(setup_metrics_recorder()));
 
     let app = Router::new()

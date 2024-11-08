@@ -2,7 +2,8 @@ use crate::{cli::Config, errors::AppError};
 use reqwest::Client;
 use serde::Deserialize;
 use serde_json::json;
-use tracing::info;
+use std::sync::{Arc, RwLock};
+use tracing::{info, warn};
 
 pub struct IcebreakersAPI {
     client: Client,
@@ -24,37 +25,46 @@ const API_URL: &str = "https://api-dev.icebreakers.blockfrost.io";
 // const API_URL: &str = "https://icebreakers-api.blockfrost.io";
 
 impl IcebreakersAPI {
-    /// Creates a new `IcebreakersAPI` instance
-    pub async fn new(config: &Config) -> Result<Self, AppError> {
-        let icebreakers_config =
-            config
-                .icebreakers_config
-                .as_ref()
-                .ok_or(AppError::Registration(
-                    "No Icebreakers config, shouldn't happen".to_string(),
-                ))?;
+    /// Creates a new `IcebreakersAPI` instance or logs a warning if not configured
+    pub async fn new(config: &Config) -> Result<Option<Arc<RwLock<Self>>>, AppError> {
+        match &config.icebreakers_config {
+            Some(icebreakers_config) => {
+                info!("Connecting to Icebreakers API...");
 
-        info!("Connecting to Icebreakers API...");
+                let client = Client::new();
+                let base_url = API_URL.to_string();
 
-        let client = Client::new();
-        let base_url = API_URL.to_string();
+                let icebreakers_api = IcebreakersAPI {
+                    client,
+                    base_url,
+                    secret: icebreakers_config.secret.clone(),
+                    mode: config.mode.to_string(),
+                    port: config.server_port,
+                    reward_address: icebreakers_config.reward_address.clone(),
+                };
 
-        let icebreakers_api = IcebreakersAPI {
-            client,
-            base_url,
-            secret: icebreakers_config.secret.clone(),
-            mode: config.mode.to_string(),
-            port: config.server_port,
-            reward_address: icebreakers_config.reward_address.clone(),
-        };
+                icebreakers_api.register().await?;
 
-        if let Err(e) = icebreakers_api.register().await {
-            return Err(e);
-        } else {
-            info!("Successfully registered with Icebreakers API.");
+                info!("Successfully registered with Icebreakers API.");
+
+                Ok(Some(Arc::new(RwLock::new(icebreakers_api))))
+            }
+            None => {
+                // Logging the solitary mode warning
+                warn!(" __________________________________________ ");
+                warn!("/ Running in solitary mode.                \\");
+                warn!("|                                          |");
+                warn!("\\ You're not part of the Blockfrost fleet! /");
+                warn!(" ------------------------------------------ ");
+                warn!("        \\   ^__^");
+                warn!("         \\  (oo)\\_______");
+                warn!("            (__)\\       )\\/\\");
+                warn!("                ||----w |");
+                warn!("                ||     ||");
+
+                Ok(None)
+            }
         }
-
-        Ok(icebreakers_api)
     }
 
     /// Registers with the Icebreakers API
