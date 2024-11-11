@@ -1,6 +1,7 @@
 use crate::cbor::haskell_types::TxValidationError;
 use crate::errors::{AppError, BlockfrostError};
 use chrono::{Duration, TimeZone, Utc};
+use deadpool::managed::Object;
 use metrics::gauge;
 use pallas_codec::minicbor::{display, Decoder};
 use pallas_crypto::hash::Hasher;
@@ -49,17 +50,11 @@ impl NodeConnPool {
     }
 
     /// Borrows a single [`NodeConn`] connection from the pool.
-    ///
-    /// TODO: it should probably return an [`AppError`], but with
-    /// [`BlockfrostError`] it’s much easier to integrate in request handlers.
-    /// We don’t convert them automatically.
-    pub async fn get(
-        &self,
-    ) -> Result<deadpool::managed::Object<NodeConnPoolManager>, BlockfrostError> {
+    pub async fn get(&self) -> Result<Object<NodeConnPoolManager>, AppError> {
         self.underlying
             .get()
             .await
-            .map_err(|err| BlockfrostError::internal_server_error(format!("NodeConnPool: {}", err)))
+            .map_err(|err| AppError::Node(format!("NodeConnPool: {}", err)))
     }
 }
 

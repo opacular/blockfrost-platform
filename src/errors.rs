@@ -45,6 +45,16 @@ impl From<serde_json::Error> for BlockfrostError {
     }
 }
 
+impl From<AppError> for BlockfrostError {
+    fn from(err: AppError) -> Self {
+        match err {
+            AppError::Node(e) => Self::internal_server_error(e),
+            AppError::Registration(e) => Self::internal_server_error(e),
+            AppError::Server(e) => Self::internal_server_error(e),
+        }
+    }
+}
+
 impl From<io::Error> for AppError {
     fn from(err: io::Error) -> Self {
         error!("I/O Error occurred: {}", err);
