@@ -8,8 +8,8 @@ RUN	cargo build --release \
 	&& rm -rf src
 COPY	./src	./src
 RUN	cargo build --release
-FROM	rust:1.82	as	runtime
-COPY	/usr/src/target/release/blockfrost-platform	/usr/local/bin/blockfrost-platform
+FROM	gcr.io/distroless/cc-debian12	as	runtime
+COPY	/usr/src/target/release/blockfrost-platform	/bin
 EXPOSE	3000/tcp
 STOPSIGNAL	SIGINT
-ENTRYPOINT	["/usr/local/bin/blockfrost-platform"]
+ENTRYPOINT	["blockfrost-platform"]
