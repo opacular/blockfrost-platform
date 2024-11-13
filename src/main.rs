@@ -23,6 +23,7 @@ use errors::BlockfrostError;
 use icebreakers_api::IcebreakersAPI;
 use middlewares::errors::error_middleware;
 use middlewares::metrics::track_http_metrics;
+use node::pool;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tower::ServiceBuilder;
@@ -48,7 +49,7 @@ async fn main() -> Result<(), AppError> {
 
     let max_node_connections = 8;
 
-    let node_conn_pool = node::NodeConnPool::new(
+    let node_conn_pool = pool::NodeConnPool::new(
         max_node_connections,
         &config.node_socket_path,
         config.network_magic,
@@ -86,7 +87,7 @@ async fn main() -> Result<(), AppError> {
     Ok(())
 }
 
-async fn node_health_check_task(node: node::NodeConnPool) {
+async fn node_health_check_task(node: pool::NodeConnPool) {
     loop {
         // It’s enough to get a working connection from the pool, because it’s being checked then.
         let health = node.get().await.map(drop).inspect_err(|err| {
