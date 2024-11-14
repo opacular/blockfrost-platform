@@ -1,4 +1,5 @@
 mod api;
+mod background_tasks;
 mod cbor;
 mod cli;
 mod common;
@@ -15,6 +16,7 @@ use axum::middleware::from_fn;
 use axum::routing::{get, post};
 use axum::Extension;
 use axum::{Router, ServiceExt};
+use background_tasks::node_health_check_task;
 use clap::Parser;
 use cli::Args;
 use cli::Config;
@@ -23,13 +25,12 @@ use errors::BlockfrostError;
 use icebreakers_api::IcebreakersAPI;
 use middlewares::errors::error_middleware;
 use middlewares::metrics::track_http_metrics;
-use node::pool;
 use node::pool::NodeConnPool;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tower::ServiceBuilder;
 use tower_http::normalize_path::NormalizePathLayer;
-use tracing::{error, info};
+use tracing::info;
 use tracing_subscriber::fmt::format::Format;
 
 #[tokio::main]
@@ -79,21 +80,6 @@ async fn main() -> Result<(), AppError> {
     axum::serve(listener, ServiceExt::<Request>::into_make_service(app)).await?;
 
     Ok(())
-}
-
-async fn node_health_check_task(node: pool::NodeConnPool) {
-    loop {
-        // It’s enough to get a working connection from the pool, because it’s being checked then.
-        let health = node.get().await.map(drop).inspect_err(|err| {
-            error!(
-                "Health check: cannot get a working N2C connection from the pool: {:?}",
-                err
-            )
-        });
-
-        let delay = tokio::time::Duration::from_secs(if health.is_ok() { 10 } else { 2 });
-        tokio::time::sleep(delay).await;
-    }
 }
 
 // This is a workaround for the malloc performance issues under heavy multi-threaded load for builds targetting musl, i.e. Alpine Linux
