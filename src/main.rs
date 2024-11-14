@@ -26,8 +26,6 @@ use icebreakers_api::IcebreakersAPI;
 use middlewares::errors::error_middleware;
 use middlewares::metrics::track_http_metrics;
 use node::pool::NodeConnPool;
-use std::sync::Arc;
-use tokio::sync::RwLock;
 use tower::ServiceBuilder;
 use tower_http::normalize_path::NormalizePathLayer;
 use tracing::info;
@@ -51,7 +49,7 @@ async fn main() -> Result<(), AppError> {
 
     let node_conn_pool = NodeConnPool::new(&config)?;
     let icebreakers_api = IcebreakersAPI::new(&config).await?;
-    let prometheus_handle = Arc::new(RwLock::new(setup_metrics_recorder()));
+    let prometheus_handle = setup_metrics_recorder();
 
     let app = Router::new()
         .route("/", get(root::route))
