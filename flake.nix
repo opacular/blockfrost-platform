@@ -54,11 +54,6 @@
           programs.yamlfmt.enable = true;
           programs.taplo.enable = true;
           programs.shfmt.enable = true;
-          settings.formatter.dockfmt = {
-            command = pkgs.dockfmt;
-            options = ["fmt" "--write"];
-            includes = ["Dockerfile"];
-          };
         };
       };
     });
