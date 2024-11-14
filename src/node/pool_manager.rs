@@ -5,12 +5,12 @@ use metrics::gauge;
 use pallas_network::facades::NodeClient as NodeClientFacade;
 use tracing::{error, info};
 
-pub struct NodeConnPoolManager {
+pub struct NodePoolManager {
     pub network_magic: u64,
     pub socket_path: String,
 }
 
-impl Manager for NodeConnPoolManager {
+impl Manager for NodePoolManager {
     type Type = NodeClient;
     type Error = AppError;
 
