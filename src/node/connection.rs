@@ -18,26 +18,10 @@ pub struct NodeConn {
     /// Note: this is an [`Option`] *only* to satisfy the borrow checker. It’s
     /// *always* [`Some`]. See [`NodeConnPoolManager::recycle`] for an
     /// explanation.
-    underlying: Option<pallas_network::facades::NodeClient>,
+    pub(in crate::node) underlying: Option<pallas_network::facades::NodeClient>,
 }
 
 impl NodeConn {
-    pub(in crate::node) fn new(underlying: pallas_network::facades::NodeClient) -> Self {
-        Self {
-            underlying: Some(underlying),
-        }
-    }
-
-    pub async fn abort(&mut self) {
-        // Take ownership of the `NodeClient` from Pallas
-        // This is the only moment when `underlying` becomes `None`.
-        // I should not be used again.
-        let owned = self.underlying.take().unwrap();
-
-        // Now call `abort` to clean up their resources:
-        owned.abort().await;
-    }
-
     /// Submits a transaction to the connected Cardano node.
     pub async fn submit_transaction(&mut self, tx: String) -> Result<String, BlockfrostError> {
         let tx = hex::decode(tx).map_err(|e| BlockfrostError::custom_400(e.to_string()))?;

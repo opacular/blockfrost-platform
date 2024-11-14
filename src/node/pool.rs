@@ -67,7 +67,9 @@ impl deadpool::managed::Manager for NodeConnPoolManager {
                     self.socket_path
                 );
                 gauge!("cardano_node_connections").increment(1);
-                Ok(NodeConn::new(conn))
+                Ok(NodeConn {
+                    underlying: Some(conn),
+                })
             }
             Err(err) => {
                 error!(
@@ -101,8 +103,13 @@ impl deadpool::managed::Manager for NodeConnPoolManager {
 
                 gauge!("cardano_node_connections").decrement(1);
 
-                // Call `abort` to clean up resources
-                conn.abort().await;
+                // Take ownership of the `NodeClient` from Pallas
+                // This is the only moment when `underlying` becomes `None`.
+                // I should not be used again.
+                let owned = conn.underlying.take().unwrap();
+
+                // Now call `abort` to clean up their resources:
+                owned.abort().await;
 
                 // And scrap the connection from the pool:
                 Err(deadpool::managed::RecycleError::Backend(AppError::Node(
