@@ -25,7 +25,7 @@ use errors::BlockfrostError;
 use icebreakers_api::IcebreakersAPI;
 use middlewares::errors::error_middleware;
 use middlewares::metrics::track_http_metrics;
-use node::pool::NodeConnPool;
+use node::pool::NodePool;
 use tower::ServiceBuilder;
 use tower_http::normalize_path::NormalizePathLayer;
 use tracing::info;
@@ -47,7 +47,7 @@ async fn main() -> Result<(), AppError> {
         )
         .init();
 
-    let node_conn_pool = NodeConnPool::new(&config)?;
+    let node_conn_pool = NodePool::new(&config)?;
     let icebreakers_api = IcebreakersAPI::new(&config).await?;
     let prometheus_handle = setup_metrics_recorder();
 

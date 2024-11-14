@@ -1,10 +1,10 @@
-use super::connection::NodeConn;
+use super::connection::NodeClient;
 use crate::errors::BlockfrostError;
 use pallas_crypto::hash::Hasher;
 use pallas_network::miniprotocols::localtxsubmission::{EraTx, Response};
 use tracing::{info, warn};
 
-impl NodeConn {
+impl NodeClient {
     /// Submits a transaction to the connected Cardano node.
     pub async fn submit_transaction(&mut self, tx: String) -> Result<String, BlockfrostError> {
         let tx = hex::decode(tx).map_err(|e| BlockfrostError::custom_400(e.to_string()))?;
@@ -12,7 +12,7 @@ impl NodeConn {
         let era_tx = EraTx(6, tx);
 
         // Connect to the node
-        let submission_client = self.underlying.as_mut().unwrap().submission();
+        let submission_client = self.client.as_mut().unwrap().submission();
 
         // Submit the transaction
         match submission_client.submit_tx(era_tx).await {

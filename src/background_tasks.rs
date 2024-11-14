@@ -1,8 +1,8 @@
-use crate::node::pool::NodeConnPool;
+use crate::node::pool::NodePool;
 use tokio::time::{self, Duration};
 use tracing::error;
 
-pub async fn node_health_check_task(node: NodeConnPool) {
+pub async fn node_health_check_task(node: NodePool) {
     loop {
         let health = node.get().await.map(drop).inspect_err(|err| {
             error!(
