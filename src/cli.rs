@@ -79,6 +79,7 @@ pub struct Config {
     pub node_socket_path: String,
     pub mode: Mode,
     pub icebreakers_config: Option<IcebreakersConfig>,
+    pub max_pool_connections: usize,
 }
 
 pub struct IcebreakersConfig {
@@ -106,6 +107,7 @@ impl Config {
             node_socket_path: args.node_socket_path,
             mode: args.mode,
             icebreakers_config,
+            max_pool_connections: 10,
         })
     }
 

@@ -1,5 +1,8 @@
 use super::pool_manager::NodeConnPoolManager;
-use crate::errors::{AppError, BlockfrostError};
+use crate::{
+    cli::Config,
+    errors::{AppError, BlockfrostError},
+};
 
 /// This represents a pool of Node2Client connections to a single `cardano-node`.
 ///
@@ -12,17 +15,13 @@ pub struct NodeConnPool {
 
 impl NodeConnPool {
     /// Creates a new pool of [`NodeConn`] connections.
-    pub fn new(
-        pool_max_size: usize,
-        socket_path: &str,
-        network_magic: u64,
-    ) -> Result<Self, AppError> {
+    pub fn new(config: &Config) -> Result<Self, AppError> {
         let manager = NodeConnPoolManager {
-            network_magic,
-            socket_path: socket_path.to_string(),
+            network_magic: config.network_magic,
+            socket_path: config.node_socket_path.to_string(),
         };
         let underlying = deadpool::managed::Pool::builder(manager)
-            .max_size(pool_max_size)
+            .max_size(config.max_pool_connections)
             .build()
             .map_err(|err| AppError::Node(err.to_string()))?;
         Ok(Self { underlying })

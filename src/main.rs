@@ -24,6 +24,7 @@ use icebreakers_api::IcebreakersAPI;
 use middlewares::errors::error_middleware;
 use middlewares::metrics::track_http_metrics;
 use node::pool;
+use node::pool::NodeConnPool;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tower::ServiceBuilder;
@@ -47,14 +48,7 @@ async fn main() -> Result<(), AppError> {
         )
         .init();
 
-    let max_node_connections = 8;
-
-    let node_conn_pool = pool::NodeConnPool::new(
-        max_node_connections,
-        &config.node_socket_path,
-        config.network_magic,
-    )?;
-
+    let node_conn_pool = NodeConnPool::new(&config)?;
     let icebreakers_api = IcebreakersAPI::new(&config).await?;
     let prometheus_handle = Arc::new(RwLock::new(setup_metrics_recorder()));
 
