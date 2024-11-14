@@ -22,7 +22,7 @@ pub struct NodeConn {
 }
 
 impl NodeConn {
-    pub fn new(underlying: pallas_network::facades::NodeClient) -> Self {
+    pub(in crate::node) fn new(underlying: pallas_network::facades::NodeClient) -> Self {
         Self {
             underlying: Some(underlying),
         }
