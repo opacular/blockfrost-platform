@@ -63,8 +63,6 @@ async fn main() -> Result<(), AppError> {
         "/".to_string()
     };
 
-    println!("api_prefix: {}", api_prefix);
-
     let api_routes = Router::new()
         .route("/", get(root::route))
         .route("/tx/submit", post(tx::submit::route))
