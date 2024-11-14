@@ -1,6 +1,8 @@
 use super::connection::NodeConn;
 use crate::errors::AppError;
+use deadpool::managed::{Manager, Metrics, RecycleError, RecycleResult};
 use metrics::gauge;
+use pallas_network::facades::NodeClient;
 use tracing::{error, info};
 
 pub struct NodeConnPoolManager {
@@ -8,16 +10,14 @@ pub struct NodeConnPoolManager {
     pub socket_path: String,
 }
 
-impl deadpool::managed::Manager for NodeConnPoolManager {
+impl Manager for NodeConnPoolManager {
     type Type = NodeConn;
     type Error = AppError;
 
     async fn create(&self) -> Result<NodeConn, AppError> {
         // TODO: maybe use `ExponentialBackoff` from `tokio-retry`, to have at
         // least _some_ debouncing between requests, if the node is down?
-        match pallas_network::facades::NodeClient::connect(&self.socket_path, self.network_magic)
-            .await
-        {
+        match NodeClient::connect(&self.socket_path, self.network_magic).await {
             Ok(conn) => {
                 info!(
                     "N2C connection to node was successfully established at socket: {}",
@@ -44,11 +44,7 @@ impl deadpool::managed::Manager for NodeConnPoolManager {
     /// because in here we only get a mutable reference. If the connection is
     /// broken, we have to call `abort`, because it joins certain multiplexer
     /// threads. Otherwise, it’s a resource leak.
-    async fn recycle(
-        &self,
-        conn: &mut NodeConn,
-        metrics: &deadpool::managed::Metrics,
-    ) -> deadpool::managed::RecycleResult<AppError> {
+    async fn recycle(&self, conn: &mut NodeConn, metrics: &Metrics) -> RecycleResult<AppError> {
         // Check if the connection is still viable
         match conn.ping().await {
             Ok(_) => Ok(()),
@@ -69,9 +65,7 @@ impl deadpool::managed::Manager for NodeConnPoolManager {
                 owned.abort().await;
 
                 // And scrap the connection from the pool:
-                Err(deadpool::managed::RecycleError::Backend(AppError::Node(
-                    err.to_string(),
-                )))
+                Err(RecycleError::Backend(AppError::Node(err.to_string())))
             }
         }
     }
