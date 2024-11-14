@@ -1,6 +1,6 @@
 use crate::{
     errors::BlockfrostError,
-    node::{NodeConnPool, SyncProgress},
+    node::{pool::NodeConnPool, SyncProgress},
 };
 use axum::{response::IntoResponse, Extension, Json};
 use serde::Serialize;
