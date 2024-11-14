@@ -84,7 +84,7 @@ async fn main() -> Result<(), AppError> {
 
     info!(
         "Server is listening on {}",
-        format!("http://{}{}", addrress, api_prefix)
+        format!("http://{}{}/", addrress, api_prefix)
     );
     info!("Log level {}", config.log_level);
     info!("Mode {}", config.mode);
