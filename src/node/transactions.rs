@@ -22,9 +22,7 @@ impl NodeConn {
             }
             Ok(Response::Rejected(reason)) => {
                 let reason = reason.0;
-
                 let msg_res = Self::try_decode_error(&reason);
-
                 let error_message = format!("Transaction rejected with reason: {:?}", msg_res);
 
                 warn!(error_message);
