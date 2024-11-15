@@ -79,12 +79,12 @@ async fn main() -> Result<(), AppError> {
         .layer(NormalizePathLayer::trim_trailing_slash())
         .service(app);
 
-    let addrress = format!("{}:{}", config.server_address, config.server_port);
-    let listener = tokio::net::TcpListener::bind(&addrress).await?;
+    let address = format!("{}:{}", config.server_address, config.server_port);
+    let listener = tokio::net::TcpListener::bind(&address).await?;
 
     info!(
         "Server is listening on {}",
-        format!("http://{}{}/", addrress, api_prefix)
+        format!("http://{}{}/", address, api_prefix)
     );
     info!("Log level {}", config.log_level);
     info!("Mode {}", config.mode);

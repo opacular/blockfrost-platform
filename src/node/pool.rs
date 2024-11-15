@@ -1,9 +1,6 @@
 use super::pool_manager::NodePoolManager;
-use crate::{
-    cli::Config,
-    errors::{AppError, BlockfrostError},
-};
-use deadpool::managed::Pool;
+use crate::{cli::Config, errors::AppError};
+use deadpool::managed::{Object, Pool};
 
 /// This represents a pool of Node2Client connections to a single `cardano-node`.
 ///
@@ -30,14 +27,10 @@ impl NodePool {
     }
 
     /// Borrows a single [`NodeConn`] connection from the pool.
-    ///
-    /// TODO: it should probably return an [`AppError`], but with
-    /// [`BlockfrostError`] it’s much easier to integrate in request handlers.
-    /// We don’t convert them automatically.
-    pub async fn get(&self) -> Result<deadpool::managed::Object<NodePoolManager>, BlockfrostError> {
+    pub async fn get(&self) -> Result<Object<NodePoolManager>, AppError> {
         self.pool_manager
             .get()
             .await
-            .map_err(|err| BlockfrostError::internal_server_error(format!("NodeConnPool: {}", err)))
+            .map_err(|err| AppError::Node(format!("NodeConnPool: {}", err)))
     }
 }

@@ -1,7 +1,10 @@
 use super::connection::NodeClient;
 use crate::errors::BlockfrostError;
 use pallas_crypto::hash::Hasher;
-use pallas_network::miniprotocols::localtxsubmission::{EraTx, Response};
+use pallas_network::miniprotocols::{
+    localstate,
+    localtxsubmission::{EraTx, Response},
+};
 use tracing::{info, warn};
 
 impl NodeClient {
@@ -9,7 +12,15 @@ impl NodeClient {
     pub async fn submit_transaction(&mut self, tx: String) -> Result<String, BlockfrostError> {
         let tx = hex::decode(tx).map_err(|e| BlockfrostError::custom_400(e.to_string()))?;
         let txid = hex::encode(Hasher::<256>::hash_cbor(&tx));
-        let era_tx = EraTx(6, tx);
+
+        let current_era = self
+            .with_statequery(|generic_client: &mut localstate::GenericClient| {
+                Box::pin(async {
+                    Ok(localstate::queries_v16::get_current_era(generic_client).await?)
+                })
+            })
+            .await?;
+        let era_tx = EraTx(current_era, tx);
 
         // Connect to the node
         let submission_client = self.client.as_mut().unwrap().submission();

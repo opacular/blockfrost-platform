@@ -55,8 +55,6 @@ impl Manager for NodePoolManager {
                     self.socket_path, err, metrics
                 );
 
-                gauge!("cardano_node_connections").decrement(1);
-
                 // Take ownership of the `NodeClient` from Pallas
                 // This is the only moment when `client` becomes `None`.
                 // I should not be used again.
