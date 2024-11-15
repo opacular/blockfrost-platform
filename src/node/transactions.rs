@@ -20,6 +20,7 @@ impl NodeClient {
                 })
             })
             .await?;
+
         let era_tx = EraTx(current_era, tx);
 
         // Connect to the node
