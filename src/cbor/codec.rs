@@ -52,7 +52,7 @@ impl<'b> Decode<'b, ()> for ApplyConwayTxPredError {
             1 => Ok(UtxowFailure(d.decode()?)),
             2 => Ok(CertsFailure(d.decode()?)),
             3 => Ok(GovFailure(d.decode()?)),
-            4 => Ok(WdrlNotDelegatedToDRep(d.decode()?)),
+            // 4 => Ok(WdrlNotDelegatedToDRep(d.decode()?)),
             5 => Ok(TreasuryValueMismatch(d.decode()?)),
             6 => Ok(TxRefScriptsSizeTooBig(d.decode()?)),
             7 => Ok(MempoolFailure(d.decode()?)),
