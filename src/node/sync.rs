@@ -1,4 +1,4 @@
-use super::connection::NodeConn;
+use super::connection::NodeClient;
 use crate::errors::BlockfrostError;
 use chrono::{Duration, TimeZone, Utc};
 use pallas_network::{miniprotocols, miniprotocols::localstate};
@@ -14,7 +14,7 @@ pub struct SyncProgress {
     block: String,
 }
 
-impl NodeConn {
+impl NodeClient {
     /// Reports the sync progress of the node.
     pub async fn sync_progress(&mut self) -> Result<SyncProgress, BlockfrostError> {
         self.with_statequery(|generic_client: &mut localstate::GenericClient| {
