@@ -54,12 +54,12 @@ impl Manager for NodeConnPoolManager {
                     self.socket_path, err, metrics
                 );
 
-                gauge!("cardano_node_connections").decrement(1);
-
                 // Take ownership of the `NodeClient` from Pallas
-                // This is the only moment when `underlying` becomes `None`.
-                // I should not be used again.
                 let owned = conn.underlying.take().unwrap();
+                // This is the only moment when `underlying` becomes `None`. But
+                // it will never be used again.
+
+                gauge!("cardano_node_connections").decrement(1);
 
                 // Now call `abort` to clean up their resources:
                 owned.abort().await;
