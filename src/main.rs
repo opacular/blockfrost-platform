@@ -5,6 +5,7 @@ mod cli;
 mod common;
 mod errors;
 mod icebreakers_api;
+mod logging;
 mod middlewares;
 mod node;
 
@@ -23,33 +24,27 @@ use cli::Config;
 use errors::AppError;
 use errors::BlockfrostError;
 use icebreakers_api::IcebreakersAPI;
+use logging::setup_tracing;
 use middlewares::errors::error_middleware;
 use middlewares::metrics::track_http_metrics;
 use node::pool::NodePool;
 use tower::ServiceBuilder;
 use tower_http::normalize_path::NormalizePathLayer;
 use tracing::info;
-use tracing_subscriber::fmt::format::Format;
 
 #[tokio::main]
 async fn main() -> Result<(), AppError> {
     let arguments = Args::parse();
     let config = Config::from_args(arguments);
 
-    tracing_subscriber::fmt()
-        .with_max_level(config.log_level)
-        .event_format(
-            Format::default()
-                .with_ansi(true)
-                .with_level(true)
-                .with_target(false)
-                .compact(),
-        )
-        .init();
+    // Setup logging
+    setup_tracing(&config);
 
     let node_conn_pool = NodePool::new(&config)?;
     let icebreakers_api = IcebreakersAPI::new(&config).await?;
     let prometheus_handle = setup_metrics_recorder();
+
+    // Get the API prefix from the Icebreakers API
     let api_prefix = if let Some(api) = &icebreakers_api {
         api.api_prefix.clone()
     } else {

@@ -17,7 +17,7 @@ pub struct IcebreakersAPI {
     mode: String,
     port: u16,
     reward_address: String,
-    pub api_prefix: String, // not an `Option`, `None` means "" (default)
+    pub api_prefix: String,
 }
 
 #[derive(Deserialize)]
