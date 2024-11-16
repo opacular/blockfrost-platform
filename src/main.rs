@@ -34,7 +34,7 @@ use tracing_subscriber::fmt::format::Format;
 #[tokio::main]
 async fn main() -> Result<(), AppError> {
     let arguments = Args::parse();
-    let config = Config::from_args(arguments)?;
+    let config = Config::from_args(arguments);
 
     tracing_subscriber::fmt()
         .with_max_level(config.log_level)

@@ -1,8 +1,6 @@
-use std::fmt::{self, Formatter};
-
-use crate::errors::AppError;
 use clap::{arg, command, Parser, ValueEnum};
 use pallas_network::miniprotocols::{MAINNET_MAGIC, PREPROD_MAGIC, PREVIEW_MAGIC};
+use std::fmt::{self, Formatter};
 use tracing::Level;
 
 #[derive(Parser, Debug)]
@@ -88,8 +86,8 @@ pub struct IcebreakersConfig {
 }
 
 impl Config {
-    pub fn from_args(args: Args) -> Result<Self, AppError> {
-        let network_magic = Self::get_network_magic(&args.network)?;
+    pub fn from_args(args: Args) -> Self {
+        let network_magic = Self::get_network_magic(&args.network);
 
         let icebreakers_config = match (args.solitary, args.reward_address, args.secret) {
             (false, Some(reward_address), Some(secret)) => Some(IcebreakersConfig {
@@ -99,7 +97,7 @@ impl Config {
             _ => None,
         };
 
-        Ok(Config {
+        Config {
             server_address: args.server_address,
             server_port: args.server_port,
             log_level: args.log_level.into(),
@@ -109,14 +107,14 @@ impl Config {
             icebreakers_config,
             max_pool_connections: 10,
             network: args.network,
-        })
+        }
     }
 
-    fn get_network_magic(network: &Network) -> Result<u64, AppError> {
+    fn get_network_magic(network: &Network) -> u64 {
         match network {
-            Network::Mainnet => Ok(MAINNET_MAGIC),
-            Network::Preprod => Ok(PREPROD_MAGIC),
-            Network::Preview => Ok(PREVIEW_MAGIC),
+            Network::Mainnet => MAINNET_MAGIC,
+            Network::Preprod => PREPROD_MAGIC,
+            Network::Preview => PREVIEW_MAGIC,
         }
     }
 }
