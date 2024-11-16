@@ -1,14 +1,10 @@
 use crate::node::pool::NodePool;
 use tokio::time::{self, Duration};
-use tracing::error;
 
 pub async fn node_health_check_task(node: NodePool) {
     loop {
-        let health = node.get().await.map(drop).inspect_err(|err| {
-            error!(
-                "Health check: cannot get a working N2C connection from the pool: {:?}",
-                err
-            )
+        let health = node.get().await.map(drop).inspect_err(|_| {
+            // error is already logged by the node pool
         });
 
         // Set delay based on health status

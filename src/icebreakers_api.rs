@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::{
     cli::{Config, Network},
     errors::AppError,
@@ -5,7 +7,6 @@ use crate::{
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::sync::{Arc, RwLock};
 use tracing::{info, warn};
 
 #[derive(Debug)]
@@ -16,7 +17,7 @@ pub struct IcebreakersAPI {
     mode: String,
     port: u16,
     reward_address: String,
-    pub api_prefix: Option<String>,
+    pub api_prefix: String, // not an `Option`, `None` means "" (default)
 }
 
 #[derive(Deserialize)]
@@ -32,7 +33,7 @@ pub struct SuccessResponse {
 
 impl IcebreakersAPI {
     /// Creates a new `IcebreakersAPI` instance or logs a warning if not configured
-    pub async fn new(config: &Config) -> Result<Option<Arc<RwLock<Self>>>, AppError> {
+    pub async fn new(config: &Config) -> Result<Option<Arc<Self>>, AppError> {
         let api_url = match config.network {
             Network::Preprod | Network::Preview => "https://api-dev.icebreakers.blockfrost.io",
             Network::Mainnet => "https://icebreakers-api.blockfrost.io",
@@ -52,15 +53,15 @@ impl IcebreakersAPI {
                     mode: config.mode.to_string(),
                     port: config.server_port,
                     reward_address: icebreakers_config.reward_address.clone(),
-                    api_prefix: None,
+                    api_prefix: "/".to_string(),
                 };
 
                 let result = icebreakers_api.register().await?;
 
                 // Pass the route to the icebreakers_api instance
-                icebreakers_api.api_prefix = Some(result.route);
+                icebreakers_api.api_prefix = result.route;
 
-                let icebreakers_api = Arc::new(RwLock::new(icebreakers_api));
+                let icebreakers_api = Arc::new(icebreakers_api);
 
                 info!("Successfully registered with Icebreakers API.");
 

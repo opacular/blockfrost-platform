@@ -50,15 +50,8 @@ async fn main() -> Result<(), AppError> {
     let node_conn_pool = NodePool::new(&config)?;
     let icebreakers_api = IcebreakersAPI::new(&config).await?;
     let prometheus_handle = setup_metrics_recorder();
-
     let api_prefix = if let Some(api) = &icebreakers_api {
-        api.read()
-            .map_err(|_| {
-                AppError::Registration("Failed to acquire read lock on IcebreakersAPI".into())
-            })?
-            .api_prefix
-            .clone()
-            .unwrap_or("/".to_string())
+        api.api_prefix.clone()
     } else {
         "/".to_string()
     };
@@ -74,7 +67,13 @@ async fn main() -> Result<(), AppError> {
         .fallback(BlockfrostError::not_found())
         .route_layer(from_fn(track_http_metrics));
 
-    let app = Router::new().nest(api_prefix.as_str(), api_routes);
+    // Decide whether to nest routes based on api_prefix
+    let app = if api_prefix == "/" || api_prefix.is_empty() {
+        Router::new().merge(api_routes)
+    } else {
+        Router::new().nest(&api_prefix, api_routes)
+    };
+
     let app = ServiceBuilder::new()
         .layer(NormalizePathLayer::trim_trailing_slash())
         .service(app);
