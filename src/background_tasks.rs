@@ -1,4 +1,4 @@
-use crate::node::pool::NodePool;
+use crate::NodePool;
 use tokio::time::{self, Duration};
 
 pub async fn node_health_check_task(node: NodePool) {

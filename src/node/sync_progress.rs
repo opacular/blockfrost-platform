@@ -1,5 +1,5 @@
 use super::connection::NodeClient;
-use crate::errors::BlockfrostError;
+use crate::BlockfrostError;
 use chrono::{Duration, TimeZone, Utc};
 use pallas_network::{miniprotocols, miniprotocols::localstate};
 use pallas_traverse::wellknown;

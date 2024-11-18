@@ -1,9 +1,8 @@
-use pallas_codec::minicbor::{decode, Decode, Decoder};
-
 use crate::cbor::haskell_types::{
     ApplyConwayTxPredError, ApplyTxErr, ConwayUtxoPredFailure, ConwayUtxoWPredFailure,
     PlutusPurpose, ShelleyBasedEra, TxValidationError, Utxo,
 };
+use pallas_codec::minicbor::{decode, Decode, Decoder};
 
 impl<'b> Decode<'b, ()> for TxValidationError {
     fn decode(d: &mut Decoder<'b>, _ctx: &mut ()) -> Result<Self, decode::Error> {

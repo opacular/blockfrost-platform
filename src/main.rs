@@ -1,33 +1,20 @@
-mod api;
-mod background_tasks;
-mod cbor;
-mod cli;
-mod common;
-mod errors;
-mod icebreakers_api;
-mod logging;
-mod middlewares;
-mod node;
-
-use api::metrics::setup_metrics_recorder;
-use api::root;
-use api::tx;
-use axum::extract::Request;
-use axum::middleware::from_fn;
-use axum::routing::{get, post};
-use axum::Extension;
-use axum::{Router, ServiceExt};
-use background_tasks::node_health_check_task;
+use axum::{
+    extract::Request,
+    middleware::from_fn,
+    routing::{get, post},
+    Extension, Router, ServiceExt,
+};
+use blockfrost_platform::{
+    api::{self, metrics::setup_metrics_recorder, root, submit},
+    background_tasks::node_health_check_task,
+    cli::{Args, Config},
+    errors::{AppError, BlockfrostError},
+    icebreakers_api::IcebreakersAPI,
+    logging::setup_tracing,
+    middlewares::{errors::error_middleware, metrics::track_http_metrics},
+    node::pool::NodePool,
+};
 use clap::Parser;
-use cli::Args;
-use cli::Config;
-use errors::AppError;
-use errors::BlockfrostError;
-use icebreakers_api::IcebreakersAPI;
-use logging::setup_tracing;
-use middlewares::errors::error_middleware;
-use middlewares::metrics::track_http_metrics;
-use node::pool::NodePool;
 use tower::ServiceBuilder;
 use tower_http::normalize_path::NormalizePathLayer;
 use tracing::info;
@@ -53,7 +40,7 @@ async fn main() -> Result<(), AppError> {
 
     let api_routes = Router::new()
         .route("/", get(root::route))
-        .route("/tx/submit", post(tx::submit::route))
+        .route("/tx/submit", post(submit::route))
         .route("/metrics", get(api::metrics::route))
         .layer(Extension(prometheus_handle))
         .layer(Extension(node_conn_pool.clone()))

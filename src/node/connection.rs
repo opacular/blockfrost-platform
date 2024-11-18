@@ -1,5 +1,5 @@
 use crate::cbor::haskell_types::TxValidationError;
-use crate::errors::BlockfrostError;
+use crate::BlockfrostError;
 use pallas_codec::minicbor::{display, Decoder};
 use pallas_network::facades::NodeClient as NodeClientFacade;
 use pallas_network::miniprotocols::localstate;

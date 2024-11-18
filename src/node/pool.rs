@@ -1,5 +1,5 @@
 use super::pool_manager::NodePoolManager;
-use crate::{cli::Config, errors::AppError};
+use crate::{cli::Config, AppError};
 use deadpool::managed::{Object, Pool};
 
 /// This represents a pool of Node2Client connections to a single `cardano-node`.

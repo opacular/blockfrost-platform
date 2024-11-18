@@ -1,5 +1,5 @@
 use super::connection::NodeClient;
-use crate::errors::BlockfrostError;
+use crate::BlockfrostError;
 use pallas_crypto::hash::Hasher;
 use pallas_network::miniprotocols::{
     localstate,

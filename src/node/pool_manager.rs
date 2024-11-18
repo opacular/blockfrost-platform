@@ -1,5 +1,5 @@
 use super::connection::NodeClient;
-use crate::errors::AppError;
+use crate::AppError;
 use deadpool::managed::{Manager, Metrics, RecycleError, RecycleResult};
 use metrics::gauge;
 use pallas_network::facades::NodeClient as NodeClientFacade;

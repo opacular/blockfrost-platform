@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use crate::{
     cli::{Config, Network},
     errors::AppError,
@@ -7,6 +5,7 @@ use crate::{
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::sync::Arc;
 use tracing::{info, warn};
 
 #[derive(Debug)]
