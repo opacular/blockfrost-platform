@@ -5,7 +5,7 @@ use axum::{
     Extension, Router, ServiceExt,
 };
 use blockfrost_platform::{
-    api::{self, metrics::setup_metrics_recorder, root, submit},
+    api::{self, metrics::setup_metrics_recorder, root, tx_submit},
     background_tasks::node_health_check_task,
     cli::{Args, Config},
     errors::{AppError, BlockfrostError},
@@ -40,7 +40,7 @@ async fn main() -> Result<(), AppError> {
 
     let api_routes = Router::new()
         .route("/", get(root::route))
-        .route("/tx/submit", post(submit::route))
+        .route("/tx/submit", post(tx_submit::route))
         .route("/metrics", get(api::metrics::route))
         .layer(Extension(prometheus_handle))
         .layer(Extension(node_conn_pool.clone()))
