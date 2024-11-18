@@ -32,7 +32,16 @@ services:
       - 3000:3000
     volumes:
       - node-ipc:/ipc
-    entrypoint: ["sh", "-c", "/app/blockfrost-platform --network $NETWORK --secret $SECRET --reward-address $REWARD_ADDRESS --node-socket-path /ipc/node.socket"]
+    entrypoint:
+      - /app/blockfrost-platform
+      - --network
+      - $NETWORK
+      - --secret
+      - $SECRET
+      - --reward-address
+      - $REWARD_ADDRESS
+      - --node-socket-path
+      - /ipc/node.socket
 
 volumes:
   node-db:
