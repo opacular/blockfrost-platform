@@ -1,4 +1,15 @@
 services:
+  init-node:
+    image: ghcr.io/input-output-hk/mithril-client:2442.0-0d4d6bc
+    entrypoint: /app/bin/entrypoint.sh
+    user: "${UID}:${GID}"
+    environment:
+      NETWORK: $NETWORK
+      UNPACK_DIR: /data
+    volumes:
+    - ./nix/mithril-entrypoint.sh:/app/bin/entrypoint.sh
+    - node-db:/data
+
   cardano-node:
     image: ghcr.io/intersectmbo/cardano-node:9.2.0
     environment:
@@ -7,6 +18,10 @@ services:
       - node-db:/data
       - node-ipc:/ipc
     restart: on-failure
+    depends_on:
+      init-node:
+        condition: service_completed_successfully
+
   blockfrost-platform:
     build:
       context: ./
@@ -17,6 +32,7 @@ services:
     volumes:
       - node-ipc:/ipc
     entrypoint: ["sh", "-c", "blockfrost-platform --network $NETWORK --secret $SECRET --reward-address $REWARD_ADDRESS --node-socket-path /ipc/node.socket"]
+
 volumes:
   node-db:
   node-ipc:
