@@ -1,4 +1,4 @@
-use crate::errors::BlockfrostError;
+use crate::BlockfrostError;
 use axum::response::{Extension, IntoResponse};
 use metrics::{describe_counter, describe_gauge, gauge};
 use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};

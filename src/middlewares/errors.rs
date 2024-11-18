@@ -1,4 +1,4 @@
-use crate::errors::BlockfrostError;
+use crate::BlockfrostError;
 use axum::{
     body::{to_bytes, Bytes},
     extract::Request,

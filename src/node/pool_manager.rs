@@ -1,5 +1,5 @@
 use super::connection::NodeClient;
-use crate::errors::AppError;
+use crate::AppError;
 use deadpool::managed::{Manager, Metrics, RecycleError, RecycleResult};
 use metrics::gauge;
 use pallas_network::facades::NodeClient as NodeClientFacade;
@@ -31,8 +31,9 @@ impl Manager for NodePoolManager {
             }
             Err(err) => {
                 error!(
-                    "Failed to connect to a N2C node socket: {}: {:?}",
-                    self.socket_path, err
+                    "Failed to connect a node socket: {}: {:?}",
+                    self.socket_path,
+                    err.to_string()
                 );
                 Err(AppError::Node(err.to_string()))
             }

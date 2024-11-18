@@ -1,71 +1,46 @@
-mod api;
-mod background_tasks;
-mod cbor;
-mod cli;
-mod common;
-mod errors;
-mod icebreakers_api;
-mod middlewares;
-mod node;
-
-use api::metrics::setup_metrics_recorder;
-use api::root;
-use api::tx;
-use axum::extract::Request;
-use axum::middleware::from_fn;
-use axum::routing::{get, post};
-use axum::Extension;
-use axum::{Router, ServiceExt};
-use background_tasks::node_health_check_task;
+use axum::{
+    extract::Request,
+    middleware::from_fn,
+    routing::{get, post},
+    Extension, Router, ServiceExt,
+};
+use blockfrost_platform::{
+    api::{self, metrics::setup_metrics_recorder, root, tx_submit},
+    background_tasks::node_health_check_task,
+    cli::{Args, Config},
+    errors::{AppError, BlockfrostError},
+    icebreakers_api::IcebreakersAPI,
+    logging::setup_tracing,
+    middlewares::{errors::error_middleware, metrics::track_http_metrics},
+    node::pool::NodePool,
+};
 use clap::Parser;
-use cli::Args;
-use cli::Config;
-use errors::AppError;
-use errors::BlockfrostError;
-use icebreakers_api::IcebreakersAPI;
-use middlewares::errors::error_middleware;
-use middlewares::metrics::track_http_metrics;
-use node::pool::NodePool;
 use tower::ServiceBuilder;
 use tower_http::normalize_path::NormalizePathLayer;
 use tracing::info;
-use tracing_subscriber::fmt::format::Format;
 
 #[tokio::main]
 async fn main() -> Result<(), AppError> {
     let arguments = Args::parse();
-    let config = Config::from_args(arguments)?;
+    let config = Config::from_args(arguments);
 
-    tracing_subscriber::fmt()
-        .with_max_level(config.log_level)
-        .event_format(
-            Format::default()
-                .with_ansi(true)
-                .with_level(true)
-                .with_target(false)
-                .compact(),
-        )
-        .init();
+    // Setup logging
+    setup_tracing(&config);
 
     let node_conn_pool = NodePool::new(&config)?;
     let icebreakers_api = IcebreakersAPI::new(&config).await?;
     let prometheus_handle = setup_metrics_recorder();
 
+    // Get the API prefix from the Icebreakers API
     let api_prefix = if let Some(api) = &icebreakers_api {
-        api.read()
-            .map_err(|_| {
-                AppError::Registration("Failed to acquire read lock on IcebreakersAPI".into())
-            })?
-            .api_prefix
-            .clone()
-            .unwrap_or("/".to_string())
+        api.api_prefix.clone()
     } else {
         "/".to_string()
     };
 
     let api_routes = Router::new()
         .route("/", get(root::route))
-        .route("/tx/submit", post(tx::submit::route))
+        .route("/tx/submit", post(tx_submit::route))
         .route("/metrics", get(api::metrics::route))
         .layer(Extension(prometheus_handle))
         .layer(Extension(node_conn_pool.clone()))
@@ -74,7 +49,13 @@ async fn main() -> Result<(), AppError> {
         .fallback(BlockfrostError::not_found())
         .route_layer(from_fn(track_http_metrics));
 
-    let app = Router::new().nest(api_prefix.as_str(), api_routes);
+    // Decide whether to nest routes based on api_prefix
+    let app = if api_prefix == "/" || api_prefix.is_empty() {
+        Router::new().merge(api_routes)
+    } else {
+        Router::new().nest(&api_prefix, api_routes)
+    };
+
     let app = ServiceBuilder::new()
         .layer(NormalizePathLayer::trim_trailing_slash())
         .service(app);
