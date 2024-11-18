@@ -1,11 +1,11 @@
-use axum::response::{IntoResponse, Response};
-use axum::{http, Json};
+use axum::{
+    response::{IntoResponse, Response},
+    {http, Json},
+};
 use http::StatusCode;
 use pallas_network::miniprotocols::localtxsubmission::Error as TxSubmissionError;
 use serde::{Deserialize, Serialize};
-use std::array::TryFromSliceError;
-use std::fmt;
-use std::io;
+use std::{array::TryFromSliceError, fmt, io};
 use thiserror::Error;
 use tracing::error;
 
