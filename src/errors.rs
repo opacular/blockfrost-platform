@@ -135,15 +135,6 @@ impl BlockfrostError {
         }
     }
 
-    /// Mimics cardano-submit-api error
-    pub fn tx_submit(message: String) -> Self {
-        Self {
-            error: "Submit Error".to_string(),
-            message,
-            status_code: 500,
-        }
-    }
-
     pub fn method_not_allowed() -> Self {
         Self::custom_400("Invalid path. Please check https://docs.blockfrost.io/".to_string())
     }

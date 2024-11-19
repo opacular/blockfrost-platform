@@ -12,6 +12,11 @@ use tracing::{info, warn};
 
 impl NodeClient {
     /// Submits a transaction to the connected Cardano node.
+    /// This API meant to be fully compatible with cardano-submit-api.
+    /// Should return Http 200 if the transaction was accepted by the node.
+    /// If the transaction was rejected, should return Http 400 with a JSON body.
+    /// swagger: https://github.com/IntersectMBO/cardano-node/blob/6e969c6bcc0f07bd1a69f4d76b85d6fa9371a90b/cardano-submit-api/swagger.yaml#L52
+    /// Haskell code:  https://github.com/IntersectMBO/cardano-node/blob/6e969c6bcc0f07bd1a69f4d76b85d6fa9371a90b/cardano-submit-api/src/Cardano/TxSubmit/Web.hs#L158
     pub async fn submit_transaction(&mut self, tx: String) -> Result<String, BlockfrostError> {
         let tx = hex::decode(tx).map_err(|e| BlockfrostError::custom_400(e.to_string()))?;
         let txid = hex::encode(Hasher::<256>::hash_cbor(&tx));
@@ -45,13 +50,13 @@ impl NodeClient {
                             .unwrap_or_else(|_| "Failed to serialize error response".to_string());
                         warn!(error_message);
 
-                        Err(BlockfrostError::tx_submit(error_message))
+                        Err(BlockfrostError::custom_400(error_message))
                     }
 
                     Err(e) => {
                         warn!("Failed to decode error reason: {:?}", e);
 
-                        Err(BlockfrostError::tx_submit(format!(
+                        Err(BlockfrostError::custom_400(format!(
                             "Failed to decode error reason: {:?}",
                             e
                         )))
@@ -61,7 +66,7 @@ impl NodeClient {
             Err(e) => {
                 let error_message = format!("Error during transaction submission: {:?}", e);
 
-                Err(BlockfrostError::tx_submit(error_message))
+                Err(BlockfrostError::custom_400(error_message))
             }
         }
     }

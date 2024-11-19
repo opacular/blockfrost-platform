@@ -73,6 +73,9 @@ impl NodeClient {
 
 #[cfg(test)]
 mod tests {
+
+    use crate::cbor::haskell_types::ShelleyBasedEra;
+
     use super::*;
 
     #[test]
@@ -82,9 +85,13 @@ mod tests {
             0, 0, 0, 2, 83, 185, 193, 29, 130, 1, 130, 0, 131, 5, 26, 0, 2, 139, 253, 24, 173,
         ];
         let error = NodeClient::try_decode_error(&buffer).unwrap();
+
         match error {
-            TxValidationError::ShelleyTxValidationError { error: _, era: _ } => assert!(true),
-            _ => assert!(false, "Expected ShelleyTxValidationError"),
+            TxValidationError::ShelleyTxValidationError { error: _, era } => assert!(
+                era == ShelleyBasedEra::ShelleyBasedEraConway,
+                "Expected ShelleyBasedEraConway"
+            ),
+            _ => panic!("Expected ShelleyTxValidationError"),
         }
     }
 }

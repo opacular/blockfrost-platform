@@ -15,19 +15,93 @@ use serde_with::SerializeDisplay;
 use std::fmt::Display;
 
 /// This file contains the types that are mapped from the Haskell codebase.
+/// The main reason these mappings exist is to mimick the error responses from the cardano-submit-api
+/// and generate identical responses to the Blockfrost.io /tx/submit API (https://docs.blockfrost.io/#tag/cardano--transactions/POST/tx/submit)
+///
+/// To mimick, we need to:
+/// - Decode the CBOR error reasons (pallas doesn't do it) from the cardano-node
+/// - Generate the same JSON response structure as the cardano-submit-api
+///
+/// So you can expect two kind of types here:
+/// - Types that are used to decode the CBOR error reasons
+/// - Types that are used to generate the JSON response structure
+///
+/// Here is an example response from the cardano-submit-api:
+/// curl --header "Content-Type: application/cbor" -X POST http://localhost:8090/api/submit/tx --data-binary @tx.bin
+/// {
+///     "contents": {
+///       "contents": {
+///         "contents": {
+///          "era": "ShelleyBasedEraConway",
+///          "error": [
+///             "ConwayUtxowFailure (UtxoFailure (ValueNotConservedUTxO (MaryValue (Coin 9498687280) (MultiAsset (fromList []))) (MaryValue (Coin 9994617117) (MultiAsset (fromList [])))))",
+///             "ConwayUtxowFailure (UtxoFailure (FeeTooSmallUTxO (Coin 166909) (Coin 173)))"
+///           ],
+///           "kind": "ShelleyTxValidationError"
+///         },
+///         "tag": "TxValidationErrorInCardanoMode"
+///       },
+///       "tag": "TxCmdTxSubmitValidationError"
+///     },
+///     "tag": "TxSubmitFail"
+///   }
+///
+/// Here is an example CBOR error reason from the cardano-node:
+/// [2,
+///     [
+///         [6,
+///             [
+///                 [1,
+///                     [0,
+///                         [6, 9498687280, 9994617117]
+///                     ]
+///                 ],
+///                 [1,
+///                     [0,
+///                         [5, 166909, 173]
+///                     ]
+///                 ]
+///             ]
+///         ]
+///     ]
+/// ]
+///
+/// TxValidationError is the most outer type that is decoded from the CBOR error reason.
+/// Than, it is wrapped in TxValidationErrorInCardanoMode and TxCmdTxSubmitValidationError to generate the JSON response.
+///
 /// Type examples:
 /// https://github.com/IntersectMBO/ouroboros-consensus/blob/82c5ebf7c9f902b7250144445f45083c1c13929e/ouroboros-consensus-cardano/src/shelley/Ouroboros/Consensus/Shelley/Eras.hs#L334
 /// https://github.com/IntersectMBO/cardano-node-emulator/blob/ba5c4910a958bbccb38399f6a871459e46701a93/cardano-node-emulator/src/Cardano/Node/Emulator/Internal/Node/Validation.hs#L255
 /// https://github.com/IntersectMBO/cardano-node/blob/master/cardano-testnet/test/cardano-testnet-test/files/golden/tx.failed.response.json.golden
 ///
 /// Haskell references to the types are commented next to them.
-/// Here are some more type referernces:
+/// Here are some more type references:
 /// https://github.com/IntersectMBO/cardano-ledger/blob/78b20b6301b2703aa1fe1806ae3c129846708a10/libs/cardano-ledger-core/src/Cardano/Ledger/BaseTypes.hs#L737
 /// https://github.com/IntersectMBO/cardano-ledger/blob/master/eras/mary/impl/src/Cardano/Ledger/Mary/Value.hs
 /// https://github.com/IntersectMBO/cardano-ledger/blob/master/libs/cardano-ledger-core/src/Cardano/Ledger/Coin.hs
 
-// https://github.com/IntersectMBO/cardano-api/blob/a0df586e3a14b98ae4771a192c09391dacb44564/cardano-api/internal/Cardano/Api/Eon/ShelleyBasedEra.hs#L271
+/*
+** cardano-node CBOR types
+** These types are used to decode the CBOR error reasons from the cardano-node.
+** Some of them are decoded in codec.rs and some of them using Derive(Decode) macro.
+*/
+// https://github.com/IntersectMBO/cardano-api/blob/a0df586e3a14b98ae4771a192c09391dacb44564/cardano-api/internal/Cardano/Api/InMode.hs#L289
+// https://github.com/IntersectMBO/cardano-api/blob/a0df586e3a14b98ae4771a192c09391dacb44564/cardano-api/internal/Cardano/Api/InMode.hs#L204
+// toJson https://github.com/IntersectMBO/cardano-api/blob/a0df586e3a14b98ae4771a192c09391dacb44564/cardano-api/internal/Cardano/Api/InMode.hs#L233
 #[derive(Debug, Serialize)]
+#[serde(tag = "kind")]
+pub enum TxValidationError {
+    ByronTxValidationError {
+        error: ApplyTxErr,
+    },
+    ShelleyTxValidationError {
+        error: ApplyTxErr,
+        era: ShelleyBasedEra,
+    },
+}
+
+// https://github.com/IntersectMBO/cardano-api/blob/a0df586e3a14b98ae4771a192c09391dacb44564/cardano-api/internal/Cardano/Api/Eon/ShelleyBasedEra.hs#L271
+#[derive(Debug, Serialize, PartialEq)]
 pub enum ShelleyBasedEra {
     ShelleyBasedEraShelley,
     ShelleyBasedEraAllegra,
@@ -140,30 +214,6 @@ impl fmt::Display for ConwayUtxoWPredFailure {
     }
 }
 
-#[derive(Debug, Decode)]
-#[cbor(transparent)]
-pub struct DisplayScriptHash(#[n(0)] pub ScriptHash);
-
-impl fmt::Display for DisplayScriptHash {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "VKeyWitness {{ {} ", (self.0))
-    }
-}
-#[derive(Debug, Decode)]
-#[cbor(transparent)]
-pub struct DisplayVKeyWitness(#[n(0)] pub VKeyWitness);
-
-impl fmt::Display for DisplayVKeyWitness {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "VKeyWitness {{ vkey: {}, signature: {} }}",
-            (self.0).vkey,
-            (self.0).signature
-        )
-    }
-}
-
 // https://github.com/IntersectMBO/cardano-ledger/blob/f54489071f4faa4b6209e1ba5288507c824cca50/eras/conway/impl/src/Cardano/Ledger/Conway/Rules/Utxo.hs#L315
 #[derive(Debug)]
 pub enum ConwayUtxoPredFailure {
@@ -257,20 +307,29 @@ impl fmt::Display for ConwayUtxoPredFailure {
     }
 }
 
-// wrapping  TxValidationError (ShelleyTxValidationError or ByronTxValidationError) in TxValidationErrorInCardanoMode
-// https://github.com/IntersectMBO/cardano-api/blob/a0df586e3a14b98ae4771a192c09391dacb44564/cardano-api/internal/Cardano/Api/InMode.hs#L289
-// https://github.com/IntersectMBO/cardano-api/blob/a0df586e3a14b98ae4771a192c09391dacb44564/cardano-api/internal/Cardano/Api/InMode.hs#L204
-// toJson https://github.com/IntersectMBO/cardano-api/blob/a0df586e3a14b98ae4771a192c09391dacb44564/cardano-api/internal/Cardano/Api/InMode.hs#L233
-#[derive(Debug, Serialize)]
-#[serde(tag = "kind")]
-pub enum TxValidationError {
-    ByronTxValidationError {
-        error: ApplyTxErr,
-    },
-    ShelleyTxValidationError {
-        error: ApplyTxErr,
-        era: ShelleyBasedEra,
-    },
+#[derive(Debug, Decode)]
+#[cbor(transparent)]
+pub struct DisplayScriptHash(#[n(0)] pub ScriptHash);
+
+impl fmt::Display for DisplayScriptHash {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "VKeyWitness {{ {} ", (self.0))
+    }
+}
+
+#[derive(Debug, Decode)]
+#[cbor(transparent)]
+pub struct DisplayVKeyWitness(#[n(0)] pub VKeyWitness);
+
+impl fmt::Display for DisplayVKeyWitness {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "VKeyWitness {{ vkey: {}, signature: {} }}",
+            (self.0).vkey,
+            (self.0).signature
+        )
+    }
 }
 
 // https://github.com/IntersectMBO/cardano-ledger/blob/f54489071f4faa4b6209e1ba5288507c824cca50/libs/cardano-ledger-core/src/Cardano/Ledger/Address.hs
@@ -413,6 +472,7 @@ pub enum TxCmdError {
     TxCmdTxSubmitValidationError(TxValidationErrorInCardanoMode),
 }
 
+// TODO: Implement DecoderError errors from the Haskell codebase.
 // Lots of errors, skipping for now. https://github.com/IntersectMBO/cardano-base/blob/391a2c5cfd30d2234097e000dbd8d9db21ef94d7/cardano-binary/src/Cardano/Binary/FromCBOR.hs#L90
 type DecoderError = String;
 
@@ -447,11 +507,15 @@ impl fmt::Display for DisplayValue {
         write!(f, "Value {{ {:?} }}", self.0)
     }
 }
+
+/*
+**Helper functions for Display'ing the types.
+*/
 fn display_tuple<T: Display, U: Display>(t: &(T, U)) -> String {
     format!("({} {})", t.0, t.1)
 }
 
-fn display_tuple_vec<T: Display, U: Display>(vec: &Vec<(T, U)>) -> String {
+fn display_tuple_vec<T: Display, U: Display>(vec: &[(T, U)]) -> String {
     vec.iter()
         .map(|x| display_tuple(x))
         .collect::<Vec<String>>()
@@ -461,13 +525,13 @@ fn display_tuple_vec<T: Display, U: Display>(vec: &Vec<(T, U)>) -> String {
 fn display_triple<T: Display, U: Display, V: Display>(t: &(T, U, V)) -> String {
     format!("({} {} {})", t.0, t.1, t.2)
 }
-fn display_triple_vec<T: Display, U: Display, V: Display>(vec: &Vec<(T, U, V)>) -> String {
+fn display_triple_vec<T: Display, U: Display, V: Display>(vec: &[(T, U, V)]) -> String {
     vec.iter()
         .map(|x| display_triple(x))
         .collect::<Vec<String>>()
         .join(" ")
 }
-fn display_vec<T: Display>(vec: &Vec<T>) -> String {
+fn display_vec<T: Display>(vec: &[T]) -> String {
     vec.iter()
         .map(|x| format!("{}", x))
         .collect::<Vec<String>>()
