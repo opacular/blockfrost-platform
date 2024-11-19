@@ -50,11 +50,11 @@ impl NodeClient {
         self.with_statequery(|_| Box::pin(async { Ok(()) })).await
     }
 
-    pub fn try_decode_error(buffer: &[u8]) -> Result<Option<TxValidationError>, Error> {
+    pub fn try_decode_error(buffer: &[u8]) -> Result<TxValidationError, Error> {
         let maybe_error = Decoder::new(buffer).decode();
 
         match maybe_error {
-            Ok(error) => Ok(Some(error)),
+            Ok(error) => Ok(error),
             Err(err) => {
                 let buffer_display = display(buffer);
                 warn!(
@@ -82,7 +82,9 @@ mod tests {
             0, 0, 0, 2, 83, 185, 193, 29, 130, 1, 130, 0, 131, 5, 26, 0, 2, 139, 253, 24, 173,
         ];
         let error = NodeClient::try_decode_error(&buffer).unwrap();
-
-        assert!(error.is_some());
+        match error {
+            TxValidationError::ShelleyTxValidationError { error: _, era: _ } => assert!(true),
+            _ => assert!(false, "Expected ShelleyTxValidationError"),
+        }
     }
 }
