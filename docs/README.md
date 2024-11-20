@@ -1,8 +1,8 @@
 # Blockfrost Platform Docs
 
-## Development
-
 http://platform.blockfrost.io
+
+## Development
 
 Before you start make sure you have downloaded and installed [Node.js LTS](https://nodejs.org/en/download/), [Yarn](https://yarnpkg.com/lang/en/docs/install/) and git.
 
