@@ -50,11 +50,11 @@ impl NodeClient {
         self.with_statequery(|_| Box::pin(async { Ok(()) })).await
     }
 
-    pub fn try_decode_error(buffer: &[u8]) -> Result<Option<TxValidationError>, Error> {
+    pub fn try_decode_error(buffer: &[u8]) -> Result<TxValidationError, Error> {
         let maybe_error = Decoder::new(buffer).decode();
 
         match maybe_error {
-            Ok(error) => Ok(Some(error)),
+            Ok(error) => Ok(error),
             Err(err) => {
                 let buffer_display = display(buffer);
                 warn!(
@@ -73,6 +73,9 @@ impl NodeClient {
 
 #[cfg(test)]
 mod tests {
+
+    use crate::cbor::haskell_types::ShelleyBasedEra;
+
     use super::*;
 
     #[test]
@@ -83,6 +86,12 @@ mod tests {
         ];
         let error = NodeClient::try_decode_error(&buffer).unwrap();
 
-        assert!(error.is_some());
+        match error {
+            TxValidationError::ShelleyTxValidationError { error: _, era } => assert!(
+                era == ShelleyBasedEra::ShelleyBasedEraConway,
+                "Expected ShelleyBasedEraConway"
+            ),
+            _ => panic!("Expected ShelleyTxValidationError"),
+        }
     }
 }
