@@ -124,10 +124,13 @@ The below command will build and run the `blocfrost-platform` binary, along with
 In the root folder of the repository:
 
 ```console
-NETWORK=preview SECRET=my-secret REWARD_ADDRESS=my-reward-address docker-compose -p preview up --build
+NETWORK=preview SECRET=my-secret REWARD_ADDRESS=my-reward-address docker compose -p preview up --build -d
+docker compose watch # Auto rebuild on changes
 ```
 
-> **_NOTE:_** If you want to skip building, omit the `--build` part.
+> **_NOTE:_** If you want to avoid running it in the background, omit the `-d` flag.
+
+> **_NOTE:_** If you want to skip building, omit the `--build` flag.
 
 > **_NOTE:_** Setting `-p preview` to the desired network will let you run on different networks without messing your node db. You can omit it if you plan to run on the same network always.
 
