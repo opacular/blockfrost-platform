@@ -23,9 +23,14 @@ services:
         condition: service_completed_successfully
 
   blockfrost-platform:
+    image: ghcr.io/blockfrost/blockfrost-platform:latest
     build:
       context: ./
       target: runtime
+    develop:
+      watch:
+      - action: rebuild
+        path: .
     init: true
     restart: on-failure
     ports:
