@@ -7,9 +7,8 @@ services:
       NETWORK: $NETWORK
       UNPACK_DIR: /data
     volumes:
-    - ./nix/mithril-entrypoint.sh:/app/bin/entrypoint.sh
-    - node-db:/data
-
+      - ./nix/mithril-entrypoint.sh:/app/bin/entrypoint.sh
+      - node-db:/data
   cardano-node:
     image: ghcr.io/intersectmbo/cardano-node:9.2.0
     environment:
@@ -21,7 +20,6 @@ services:
     depends_on:
       init-node:
         condition: service_completed_successfully
-
   blockfrost-platform:
     image: ghcr.io/blockfrost/blockfrost-platform:latest
     build:
@@ -29,8 +27,8 @@ services:
       target: runtime
     develop:
       watch:
-      - action: rebuild
-        path: .
+        - action: rebuild
+          path: .
     init: true
     restart: on-failure
     ports:
@@ -47,7 +45,6 @@ services:
       - $REWARD_ADDRESS
       - --node-socket-path
       - /ipc/node.socket
-
 volumes:
   node-db:
   node-ipc:

@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       upload_artifacts:
-        description: 'Upload artifacts'
+        description: "Upload artifacts"
         type: boolean
         required: true
         default: true

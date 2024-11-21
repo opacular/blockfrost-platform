@@ -3,11 +3,11 @@ set -euo pipefail
 
 # ---------------------------------------------------------------------------- #
 
-if [[ -z "${NETWORK:-}" ]]; then
+if [[ -z ${NETWORK:-} ]]; then
   echo NETWORK must be explicitly set
   exit 1
 fi
-if [[ -z "${UNPACK_DIR:-}" ]]; then
+if [[ -z ${UNPACK_DIR:-} ]]; then
   echo UNPACK_DIR must be explicitly set
   exit 1
 fi
@@ -18,10 +18,13 @@ if [ -d "$UNPACK_DIR/db" ]; then
 fi
 
 case "$NETWORK" in
-    "mainnet") MITHRIL_NETWORK="release-mainnet" ;;
-    "preprod") MITHRIL_NETWORK="release-preprod" ;;
-    "preview") MITHRIL_NETWORK="pre-release-preview" ;;
-    *) echo >&2 "fatal: invalid \$NETWORK value: $NETWORK"; exit 1 ;;
+"mainnet") MITHRIL_NETWORK="release-mainnet" ;;
+"preprod") MITHRIL_NETWORK="release-preprod" ;;
+"preview") MITHRIL_NETWORK="pre-release-preview" ;;
+*)
+  echo >&2 "fatal: invalid \$NETWORK value: $NETWORK"
+  exit 1
+  ;;
 esac
 export MITHRIL_NETWORK
 
@@ -34,9 +37,10 @@ apt install jq curl -y
 
 # ---------------------------------------------------------------------------- #
 
-export snapshotDigest=$(/app/bin/mithril-client cardano-db snapshot list --json | jq -r ".[0].digest")
+snapshotDigest=$(/app/bin/mithril-client cardano-db snapshot list --json | jq -r ".[0].digest")
+export snapshotDigest
 
-export GENESIS_VERIFICATION_KEY=$(curl -fsSL "https://raw.githubusercontent.com/input-output-hk/mithril/refs/heads/main/mithril-infra/configuration/${MITHRIL_NETWORK}/genesis.vkey")
+GENESIS_VERIFICATION_KEY=$(curl -fsSL "https://raw.githubusercontent.com/input-output-hk/mithril/refs/heads/main/mithril-infra/configuration/${MITHRIL_NETWORK}/genesis.vkey")
+export GENESIS_VERIFICATION_KEY
 
 /app/bin/mithril-client cardano-db download "$snapshotDigest" --download-dir "$UNPACK_DIR" --json
-
