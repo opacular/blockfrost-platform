@@ -50,6 +50,14 @@
         treefmt = {pkgs, ...}: {
           projectRootFile = "flake.nix";
           programs.alejandra.enable = true;
+          programs.prettier.enable = true;
+          settings.formatter.prettier.options = [
+            "--config"
+            (builtins.path {
+              path = ./docs/.prettierrc;
+              name = "prettierrc.json";
+            })
+          ];
           programs.rustfmt.enable = true;
           programs.yamlfmt.enable = true;
           programs.taplo.enable = true;

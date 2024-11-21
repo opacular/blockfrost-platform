@@ -1,5 +1,5 @@
 let config = {
-  index: 'Introduction',
-}
+  index: "Introduction",
+};
 
 export default config;
