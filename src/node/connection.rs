@@ -51,7 +51,7 @@ impl NodeClient {
     }
 
     pub fn try_decode_error(buffer: &[u8]) -> Result<TxValidationError, Error> {
-        let maybe_error = Decoder::new(buffer).decode();
+        let maybe_error = Decoder::new(buffer[2..].as_ref()).decode();
 
         match maybe_error {
             Ok(error) => Ok(error),
@@ -74,23 +74,34 @@ impl NodeClient {
 #[cfg(test)]
 mod tests {
 
-    use crate::cbor::haskell_types::ShelleyBasedEra;
+    use crate::cbor::haskell_types::{ApplyTxErr, ShelleyBasedEra};
 
     use super::*;
 
     #[test]
     fn test_try_decode_error() {
-        let buffer = [
-            130, 2, 129, 130, 6, 130, 130, 1, 130, 0, 131, 6, 27, 0, 0, 0, 2, 54, 42, 119, 48, 27,
-            0, 0, 0, 2, 83, 185, 193, 29, 130, 1, 130, 0, 131, 5, 26, 0, 2, 139, 253, 24, 173,
-        ];
-        let error = NodeClient::try_decode_error(&buffer).unwrap();
+        assert_decoding(
+            "8202818206828201820083061b00000002362a77301b0000000253b9c11d8201820083051a00028bfd18ad", 2
+        );
+        assert_decoding("8202818206828201820083051a000151351a00074b8582076162", 2);
+    }
+    fn assert_decoding(cbor_hex: &str, error_count: usize) {
+        let buffer = hex::decode(cbor_hex).unwrap();
+
+        let error = NodeClient::try_decode_error(&buffer);
 
         match error {
-            TxValidationError::ShelleyTxValidationError { error: _, era } => assert!(
-                era == ShelleyBasedEra::ShelleyBasedEraConway,
-                "Expected ShelleyBasedEraConway"
-            ),
+            Ok(TxValidationError::ShelleyTxValidationError {
+                error: ApplyTxErr(errors),
+                era,
+            }) => {
+                assert!(
+                    era == ShelleyBasedEra::ShelleyBasedEraConway,
+                    "Expected ShelleyBasedEraConway"
+                );
+                assert_eq!(errors.len(), error_count, "Errors count mismatch",);
+            }
+            Err(error) => panic!("Failed to decode cbor: {:?}, error: {:?}", cbor_hex, error),
             _ => panic!("Expected ShelleyTxValidationError"),
         }
     }

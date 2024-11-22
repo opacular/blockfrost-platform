@@ -8,24 +8,9 @@ use crate::cbor::haskell_types::{
 impl<'b> Decode<'b, ()> for TxValidationError {
     fn decode(d: &mut Decoder<'b>, _ctx: &mut ()) -> Result<Self, decode::Error> {
         d.array()?;
-        let error_tag = d.u16()?;
-        d.array()?;
-
-        match error_tag {
-            1 => {
-                let error = d.decode()?;
-                Ok(TxValidationError::ByronTxValidationError { error })
-            }
-            2 => {
-                let era = d.decode()?;
-                let error = d.decode()?;
-                Ok(TxValidationError::ShelleyTxValidationError { error, era })
-            }
-            _ => Err(decode::Error::message(format!(
-                "unknown error tag while decoding TxValidationError: {}",
-                error_tag
-            ))),
-        }
+        let era = d.decode()?;
+        let error = d.decode()?;
+        Ok(TxValidationError::ShelleyTxValidationError { error, era })
     }
 }
 
