@@ -140,7 +140,25 @@
         "flake-compat": "flake-compat",
         "flake-parts": "flake-parts",
         "nixpkgs": "nixpkgs",
+        "testgen-hs": "testgen-hs",
         "treefmt-nix": "treefmt-nix"
+      }
+    },
+    "testgen-hs": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1732706647,
+        "narHash": "sha256-761CbbEvdVbp+51kYtPrK4rgHjojYk4mncrFNQURQ54=",
+        "owner": "input-output-hk",
+        "repo": "testgen-hs",
+        "rev": "1266c36e2aee0a97e10fb3854bdf801e78650a5d",
+        "type": "github"
+      },
+      "original": {
+        "owner": "input-output-hk",
+        "ref": "10.1.2.1",
+        "repo": "testgen-hs",
+        "type": "github"
       }
     },
     "treefmt-nix": {

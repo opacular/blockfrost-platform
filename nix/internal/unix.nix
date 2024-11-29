@@ -36,6 +36,16 @@ in rec {
   package = craneLib.buildPackage (commonArgs
     // {
       inherit cargoArtifacts;
+      preCheck = ''
+        export PATH=${lib.makeBinPath [testgen-hs]}:"$PATH"
+      '';
+      postInstall = ''
+        chmod -R +w $out
+        mv $out/bin $out/libexec
+        ln -sf ${testgen-hs}/bin $out/libexec/testgen-hs
+        mkdir -p $out/bin
+        ln -sf $out/libexec/blockfrost-platform $out/bin/
+      '';
     });
 
   cardano-node-flake = let
@@ -71,6 +81,10 @@ in rec {
     name = "cardano-playground-configs";
     path = inputs.cardano-playground + "/static/book.play.dev.cardano.org/environments";
   };
+
+  testgen-hs-flake = (import inputs.flake-compat {src = inputs.testgen-hs;}).defaultNix;
+
+  testgen-hs = testgen-hs-flake.packages.${targetSystem}.default;
 
   stateDir =
     if pkgs.stdenv.isDarwin
