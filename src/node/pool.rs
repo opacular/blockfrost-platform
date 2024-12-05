@@ -2,7 +2,7 @@ use super::pool_manager::NodePoolManager;
 use crate::{cbor::fallback_decoder::FallbackDecoder, cli::Config, AppError};
 use deadpool::managed::{Object, Pool};
 
-/// This represents a pool of Node2Client connections to a single `cardano-node`.
+/// This represents a pool of `NodeToClient` connections to a single `cardano-node`.
 ///
 /// It can be safely cloned to multiple threads, while still sharing the same
 /// set of underlying connections to the node.
@@ -12,7 +12,7 @@ pub struct NodePool {
 }
 
 impl NodePool {
-    /// Creates a new pool of [`NodeConn`] connections.
+    /// Creates a new pool of [`super::connection::NodeClient`] connections.
     pub fn new(config: &Config, fallback_decoder: FallbackDecoder) -> Result<Self, AppError> {
         let manager = NodePoolManager {
             network_magic: config.network_magic,
@@ -27,7 +27,7 @@ impl NodePool {
         Ok(Self { pool_manager })
     }
 
-    /// Borrows a single [`NodeConn`] connection from the pool.
+    /// Borrows a single [`super::connection::NodeClient`] connection from the pool.
     pub async fn get(&self) -> Result<Object<NodePoolManager>, AppError> {
         self.pool_manager
             .get()
