@@ -16,7 +16,7 @@ use std::fmt::Display;
 
 /// This file contains the types that are mapped from the Haskell codebase.
 /// The main reason these mappings exist is to mimick the error responses from the cardano-submit-api
-/// and generate identical responses to the Blockfrost.io /tx/submit API (https://docs.blockfrost.io/#tag/cardano--transactions/POST/tx/submit)
+/// and generate identical responses to the [Blockfrost.io `/tx/submit` API](https://docs.blockfrost.io/#tag/cardano--transactions/POST/tx/submit).
 ///
 /// To mimick, we need to:
 /// - Decode the CBOR error reasons (pallas doesn't do it) from the cardano-node
@@ -27,6 +27,7 @@ use std::fmt::Display;
 /// - Types that are used to generate the JSON response structure
 ///
 /// Here is an example response from the cardano-submit-api:
+/// ```text
 /// curl --header "Content-Type: application/cbor" -X POST http://localhost:8090/api/submit/tx --data-binary @tx.bin
 /// {
 ///     "contents": {
@@ -45,8 +46,10 @@ use std::fmt::Display;
 ///     },
 ///     "tag": "TxSubmitFail"
 ///   }
+/// ```
 ///
 /// Here is an example CBOR error reason from the cardano-node:
+/// ```text
 /// [2,
 ///     [
 ///         [6,
@@ -65,20 +68,21 @@ use std::fmt::Display;
 ///         ]
 ///     ]
 /// ]
+/// ```
 ///
 /// TxValidationError is the most outer type that is decoded from the CBOR error reason.
 /// Than, it is wrapped in TxValidationErrorInCardanoMode and TxCmdTxSubmitValidationError to generate the JSON response.
 ///
 /// Type examples:
-/// https://github.com/IntersectMBO/ouroboros-consensus/blob/82c5ebf7c9f902b7250144445f45083c1c13929e/ouroboros-consensus-cardano/src/shelley/Ouroboros/Consensus/Shelley/Eras.hs#L334
-/// https://github.com/IntersectMBO/cardano-node-emulator/blob/ba5c4910a958bbccb38399f6a871459e46701a93/cardano-node-emulator/src/Cardano/Node/Emulator/Internal/Node/Validation.hs#L255
-/// https://github.com/IntersectMBO/cardano-node/blob/master/cardano-testnet/test/cardano-testnet-test/files/golden/tx.failed.response.json.golden
+/// * <https://github.com/IntersectMBO/ouroboros-consensus/blob/82c5ebf7c9f902b7250144445f45083c1c13929e/ouroboros-consensus-cardano/src/shelley/Ouroboros/Consensus/Shelley/Eras.hs#L334>
+/// * <https://github.com/IntersectMBO/cardano-node-emulator/blob/ba5c4910a958bbccb38399f6a871459e46701a93/cardano-node-emulator/src/Cardano/Node/Emulator/Internal/Node/Validation.hs#L255>
+/// * <https://github.com/IntersectMBO/cardano-node/blob/master/cardano-testnet/test/cardano-testnet-test/files/golden/tx.failed.response.json.golden>
 ///
 /// Haskell references to the types are commented next to them.
 /// Here are some more type references:
-/// https://github.com/IntersectMBO/cardano-ledger/blob/78b20b6301b2703aa1fe1806ae3c129846708a10/libs/cardano-ledger-core/src/Cardano/Ledger/BaseTypes.hs#L737
-/// https://github.com/IntersectMBO/cardano-ledger/blob/master/eras/mary/impl/src/Cardano/Ledger/Mary/Value.hs
-/// https://github.com/IntersectMBO/cardano-ledger/blob/master/libs/cardano-ledger-core/src/Cardano/Ledger/Coin.hs
+/// * <https://github.com/IntersectMBO/cardano-ledger/blob/78b20b6301b2703aa1fe1806ae3c129846708a10/libs/cardano-ledger-core/src/Cardano/Ledger/BaseTypes.hs#L737>
+/// * <https://github.com/IntersectMBO/cardano-ledger/blob/master/eras/mary/impl/src/Cardano/Ledger/Mary/Value.hs>
+/// * <https://github.com/IntersectMBO/cardano-ledger/blob/master/libs/cardano-ledger-core/src/Cardano/Ledger/Coin.hs>
 
 /*
 ** cardano-node CBOR types

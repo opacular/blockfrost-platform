@@ -44,10 +44,10 @@ impl Manager for NodePoolManager {
 
     /// Pallas decided to make the
     /// [`pallas_network::facades::NodeClient::abort`] take ownership of `self`.
-    /// That’s why we need our [`Node::client`] to be an [`Option`],
-    /// because in here we only get a mutable reference. If the connection is
-    /// broken, we have to call `abort`, because it joins certain multiplexer
-    /// threads. Otherwise, it’s a resource leak.
+    /// That’s why we need our `NodeClient::client` to be an [`Option`], because
+    /// in here we only get a mutable reference. If the connection is broken, we
+    /// have to call [`pallas_network::facades::NodeClient::abort`], because it
+    /// joins certain multiplexer threads. Otherwise, it’s a resource leak.
     async fn recycle(&self, node: &mut NodeClient, metrics: &Metrics) -> RecycleResult<AppError> {
         // Check if the connection is still viable
         match node.ping().await {

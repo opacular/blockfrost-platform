@@ -13,8 +13,8 @@ use tracing::warn;
 /// this, you won’t get any deadlocks, inconsistencies, etc.
 pub struct NodeClient {
     /// Note: this is an [`Option`] *only* to satisfy the borrow checker. It’s
-    /// *always* [`Some`]. See [`NodeConnPoolManager::recycle`] for an
-    /// explanation.
+    /// *always* [`Some`]. See [`<super::pool_manager::NodePoolManager as
+    /// deadpool::managed::Manager>>::recycle`] for an explanation.
     pub(in crate::node) client: Option<NodeClientFacade>,
     pub(in crate::node) fallback_decoder: FallbackDecoder,
 }
