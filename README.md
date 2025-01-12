@@ -1,3 +1,6 @@
+<img src="https://blockfrost.io/images/logo.svg" width="250" align="right" height="90">
+<!-- TODO: platform specific logo would be nice -->
+
 # Blockfrost Platform
 
 Decentralized API node.
