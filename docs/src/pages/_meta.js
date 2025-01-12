@@ -8,7 +8,7 @@ let config = {
   "usage": "Usage",
   "options": "Advanced options",
   "---": {
-        type: "separator"
+    type: "separator"
   },
   "faq": "FAQ",
 };

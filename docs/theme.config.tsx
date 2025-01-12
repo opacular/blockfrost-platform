@@ -1,5 +1,5 @@
 import React from "react";
-import { Callout, DocsThemeConfig } from "nextra-theme-docs";
+import { DocsThemeConfig } from "nextra-theme-docs";
 
 const config: DocsThemeConfig = {
   logo: () => (
