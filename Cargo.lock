@@ -303,6 +303,7 @@ dependencies = [
  "dirs",
  "hex",
  "jemalloc",
+ "lazy_static",
  "metrics",
  "metrics-exporter-prometheus",
  "pallas",
