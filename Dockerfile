@@ -1,4 +1,4 @@
-FROM lukemathwalker/cargo-chef:latest-rust-slim-bookworm AS base
+FROM lukemathwalker/cargo-chef:0.1.68-rust-slim-bookworm AS base
 RUN apt update ; apt install sccache pkg-config libssl-dev bzip2 -y
 ENV RUSTC_WRAPPER=sccache SCCACHE_DIR=/sccache
 WORKDIR /app
@@ -25,7 +25,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=$SCCACHE_DIR,sharing=locked \
     cargo build --release
 
-FROM gcr.io/distroless/cc-debian12	as runtime
+FROM gcr.io/distroless/cc-debian12 AS runtime
 COPY --from=builder /app/target/release/blockfrost-platform /app/
 COPY --from=downloader /app/testgen-hs /app/testgen-hs
 EXPOSE 3000/tcp
