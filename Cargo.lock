@@ -109,28 +109,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "37bf3594c4c988a53154954629820791dde498571819ae4ca50ca811e060cc95"
 
 [[package]]
-name = "async-stream"
-version = "0.3.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cd56dd203fef61ac097dd65721a419ddccb106b2d2b70ba60a6b529f03961a51"
-dependencies = [
- "async-stream-impl",
- "futures-core",
- "pin-project-lite",
-]
-
-[[package]]
-name = "async-stream-impl"
-version = "0.3.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "16e62a023e7c117e27523144c5d2459f4397fcc3cab0085af8e2224f643a0193"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
 name = "async-trait"
 version = "0.1.82"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -181,7 +159,7 @@ dependencies = [
  "serde_urlencoded",
  "sync_wrapper 1.0.1",
  "tokio",
- "tower 0.5.1",
+ "tower",
  "tower-layer",
  "tower-service",
  "tracing",
@@ -320,7 +298,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "toml",
- "tower 0.5.1",
+ "tower",
  "tower-http",
  "tower-layer",
  "tracing",
@@ -379,9 +357,9 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
 name = "chrono"
-version = "0.4.38"
+version = "0.4.39"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a21f936df1771bf62b77f047b726c4625ff2e8aa607c01ec06e5a05bd8463401"
+checksum = "7e36cc9d416881d2e24f9a963be5fb1cd90966419ac844274161d10488b3e825"
 dependencies = [
  "android-tzdata",
  "iana-time-zone",
@@ -991,19 +969,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "hyper-timeout"
-version = "0.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2b90d566bffbce6a75bd8b09a05aa8c2cb1fabb6cb348f8840c9e4c90a0d83b0"
-dependencies = [
- "hyper",
- "hyper-util",
- "pin-project-lite",
- "tokio",
- "tower-service",
-]
-
-[[package]]
 name = "hyper-tls"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1459,9 +1424,9 @@ checksum = "b15813163c1d831bf4a13c3610c05c0d03b39feb07f7e09fa234dac9b15aaf39"
 
 [[package]]
 name = "pallas"
-version = "0.31.0"
+version = "0.32.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "acf49f6ccfaebd82bebd93f3d050eda2c0dfba6d8265e25528e96f083ee066be"
+checksum = "f6092359c94e86cfc1047b4b5da8284d6d2ee22e4bf0eaa6d9ee8158fb8f1c5b"
 dependencies = [
  "pallas-addresses",
  "pallas-codec",
@@ -1476,9 +1441,9 @@ dependencies = [
 
 [[package]]
 name = "pallas-addresses"
-version = "0.31.0"
+version = "0.32.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5d47110e25338f995c1f29858292c016b974d23fa3a1ce97fff542047b6c2142"
+checksum = "d7bd039d7f1618d12ff348dd03eebe38c5d2a010325750e5341526c419b0f8e0"
 dependencies = [
  "base58",
  "bech32",
@@ -1492,10 +1457,11 @@ dependencies = [
 
 [[package]]
 name = "pallas-applying"
-version = "0.31.0"
+version = "0.32.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "66756768a0d37bcb23be9c9bcf4b1f1b53d2692981bdb720e689a38da954989e"
+checksum = "15e103c84957d01753f2103c9d2e8f845638309af54d899c1c857e0b0d45cbcf"
 dependencies = [
+ "chrono",
  "hex",
  "pallas-addresses",
  "pallas-codec",
@@ -1507,9 +1473,9 @@ dependencies = [
 
 [[package]]
 name = "pallas-codec"
-version = "0.31.0"
+version = "0.32.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1389b47a97864a7cb167e2392b44332930af90f6aaaac45eb2f369ccab95f4c7"
+checksum = "1584d615857c0a44058fb612e892e9e0cc47b56c3c82cdf7347b5c1d1193598c"
 dependencies = [
  "hex",
  "minicbor",
@@ -1519,9 +1485,9 @@ dependencies = [
 
 [[package]]
 name = "pallas-configs"
-version = "0.31.0"
+version = "0.32.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "78e964ec9c2cd1f21dbe93176ea3ca43d3da16ef13e653fcc5004a55adc5f926"
+checksum = "7d374a71a037f0801a5feef6521216439f2db31156ca20d53cf8dc4c1af4de17"
 dependencies = [
  "base64 0.22.1",
  "hex",
@@ -1537,9 +1503,9 @@ dependencies = [
 
 [[package]]
 name = "pallas-crypto"
-version = "0.31.0"
+version = "0.32.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f5d84346a1f0da5240b2aa16fde96998b84cdcc466cb7c04ba24bb1e1630e0d3"
+checksum = "37c1d642326ce402eb9191aeacc3dd0bf2b499848e97a56396c978a6eb9dd31a"
 dependencies = [
  "cryptoxide",
  "hex",
@@ -1552,9 +1518,9 @@ dependencies = [
 
 [[package]]
 name = "pallas-network"
-version = "0.31.0"
+version = "0.32.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e6536d3afc8eef5651705c6f046e0900277ff6392491670d995e613335436bd0"
+checksum = "e6e44dd876dc70cbbfc865bb9143131f57edab2c45e873d915732b81982ddb67"
 dependencies = [
  "byteorder 1.5.0",
  "hex",
@@ -1570,9 +1536,9 @@ dependencies = [
 
 [[package]]
 name = "pallas-primitives"
-version = "0.31.0"
+version = "0.32.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5627a5cd6512eaa3900b93d8b6e604d495a31d4439c9f34d9f88ec38383c0ddc"
+checksum = "6d30f5053073554d016a9f009c077f9a84275951a611cce54230de6c54d34d9b"
 dependencies = [
  "base58",
  "bech32",
@@ -1586,9 +1552,9 @@ dependencies = [
 
 [[package]]
 name = "pallas-traverse"
-version = "0.31.0"
+version = "0.32.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5d04fc75a2144eb257c68b4604cdde647e07404ea185b791c0005826960dfb35"
+checksum = "02d2572d316883fe866ae648bc3c5357e70cbbe8de5d78b1246f6109520fa52f"
 dependencies = [
  "hex",
  "itertools",
@@ -1603,9 +1569,9 @@ dependencies = [
 
 [[package]]
 name = "pallas-txbuilder"
-version = "0.31.0"
+version = "0.32.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7d6454a6439726ff2645a5c8e981c0cd4a6fc0338f7ef1a216e9e9be751dc4db"
+checksum = "b126cd2f387af2478f9b0f6b422c613f74024350600cf5bd7c31e2c85c3c7062"
 dependencies = [
  "hex",
  "pallas-addresses",
@@ -1621,9 +1587,9 @@ dependencies = [
 
 [[package]]
 name = "pallas-utxorpc"
-version = "0.31.0"
+version = "0.32.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bdc07262343b18927a86dee4838f2ded8e1e586bab81eb5f0e865fe091ca7dc6"
+checksum = "609f39f3f9b8ff0e8593bfc3e6e3c53a14dd3ed41e1dfac24a41541fc7cab620"
 dependencies = [
  "pallas-applying",
  "pallas-codec",
@@ -1636,9 +1602,9 @@ dependencies = [
 
 [[package]]
 name = "pallas-wallet"
-version = "0.31.0"
+version = "0.32.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8d76c282bf2c191eb9d5326ad5f023fc0fde058c3a8e8bd7ef3ff0c4fbba86b4"
+checksum = "812859b4571cb53182d34094ae3ec391a25d50b0c586be5876d4d86e4eb124bc"
 dependencies = [
  "bech32",
  "bip39",
@@ -2737,45 +2703,16 @@ version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "877c5b330756d856ffcc4553ab34a5684481ade925ecc54bcd1bf02b1d0d4d52"
 dependencies = [
- "async-stream",
  "async-trait",
- "axum",
  "base64 0.22.1",
  "bytes",
- "h2",
  "http",
  "http-body",
  "http-body-util",
- "hyper",
- "hyper-timeout",
- "hyper-util",
  "percent-encoding",
  "pin-project",
  "prost",
- "socket2",
- "tokio",
  "tokio-stream",
- "tower 0.4.13",
- "tower-layer",
- "tower-service",
- "tracing",
-]
-
-[[package]]
-name = "tower"
-version = "0.4.13"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b8fa9be0de6cf49e536ce1851f987bd21a43b771b09473c3549a6c853db37c1c"
-dependencies = [
- "futures-core",
- "futures-util",
- "indexmap 1.9.3",
- "pin-project",
- "pin-project-lite",
- "rand",
- "slab",
- "tokio",
- "tokio-util",
  "tower-layer",
  "tower-service",
  "tracing",
@@ -2987,9 +2924,9 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 
 [[package]]
 name = "utxorpc-spec"
-version = "0.11.0"
+version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dd510ca9b5937fe5e62be72924f0a9a217c35fdcd10f0959be60319f4cac639b"
+checksum = "a9c73cb3e15766a14cbc99fbd6dbbee04496fc9c64b47b088ae1d7698d43e357"
 dependencies = [
  "bytes",
  "futures-core",

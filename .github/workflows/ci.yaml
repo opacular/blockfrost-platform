@@ -33,7 +33,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          version="10.1.2.1"
+          version="10.1.4.0"
           case "${{ matrix.os }}" in
             macos-latest)
               target=testgen-hs-"$version"-aarch64-darwin.tar.bz2
