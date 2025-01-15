@@ -1,10 +1,8 @@
-name: Publish OCI
+name: OCI
 on:
   push:
-    branches:
-      - main
 jobs:
-  publish:
+  build:
     runs-on: ubuntu-latest
     steps:
       - name: 📥 Checkout repository
@@ -15,7 +13,10 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: 🚀 Build and push the image
+      - name: 🚀 Build the image
         run: |
           docker compose build
+      - name: 📤 Push the image
+        if: github.ref == 'refs/heads/main'
+        run: |
           docker push ghcr.io/blockfrost/blockfrost-platform:latest
