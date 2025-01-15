@@ -17,7 +17,9 @@
     cardano-playground.flake = false; # otherwise, +9k dependencies in flake.lock…
   };
 
-  outputs = inputs:
+  outputs = inputs: let
+    inherit (inputs.nixpkgs) lib;
+  in
     inputs.flake-parts.lib.mkFlake {inherit inputs;} ({config, ...}: {
       imports = [
         inputs.devshell.flakeModule
@@ -25,10 +27,10 @@
       ];
 
       flake.internal =
-        inputs.nixpkgs.lib.genAttrs config.systems (
+        lib.genAttrs config.systems (
           targetSystem: import ./nix/internal/unix.nix {inherit inputs targetSystem;}
         )
-        // inputs.nixpkgs.lib.genAttrs ["x86_64-windows"] (
+        // lib.genAttrs ["x86_64-windows"] (
           targetSystem: import ./nix/internal/windows.nix {inherit inputs targetSystem;}
         );
 
@@ -46,7 +48,7 @@
             default = internal.package;
             inherit (internal) tx-build cardano-address testgen-hs;
           }
-          // (inputs.nixpkgs.lib.optionalAttrs (system == "x86_64-linux") {
+          // (lib.optionalAttrs (system == "x86_64-linux") {
             default-x86_64-windows = inputs.self.internal.x86_64-windows.package;
           });
 
@@ -67,6 +69,26 @@
           programs.yamlfmt.enable = pkgs.system != "x86_64-darwin"; # a treefmt-nix+yamlfmt bug on Intel Macs
           programs.taplo.enable = true; # TOML
           programs.shfmt.enable = true;
+        };
+      };
+
+      flake.hydraJobs = {
+        blockfrost-platform =
+          lib.genAttrs (
+            config.systems
+            # ++ ["x86_64-windows"]
+          ) (
+            targetSystem: inputs.self.internal.${targetSystem}.package
+          );
+        devshell = lib.genAttrs config.systems (
+          targetSystem: inputs.self.devShells.${targetSystem}.default
+        );
+        required = inputs.nixpkgs.legacyPackages.x86_64-linux.releaseTools.aggregate {
+          name = "github-required";
+          meta.description = "All jobs required to pass CI";
+          constituents =
+            lib.collect lib.isDerivation inputs.self.hydraJobs.blockfrost-platform
+            ++ lib.collect lib.isDerivation inputs.self.hydraJobs.devshell;
         };
       };
     });
