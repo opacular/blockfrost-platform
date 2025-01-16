@@ -77,25 +77,29 @@
         };
       };
 
-      flake.hydraJobs = {
-        blockfrost-platform =
-          lib.genAttrs (
-            config.systems
-            # ++ ["x86_64-windows"]
-          ) (
-            targetSystem: inputs.self.internal.${targetSystem}.package
+      flake.hydraJobs = let
+        allJobs = {
+          blockfrost-platform =
+            lib.genAttrs (
+              config.systems
+              # ++ ["x86_64-windows"]
+            ) (
+              targetSystem: inputs.self.internal.${targetSystem}.package
+            );
+          devshell = lib.genAttrs config.systems (
+            targetSystem: inputs.self.devShells.${targetSystem}.default
           );
-        devshell = lib.genAttrs config.systems (
-          targetSystem: inputs.self.devShells.${targetSystem}.default
-        );
-        required = inputs.nixpkgs.legacyPackages.x86_64-linux.releaseTools.aggregate {
-          name = "github-required";
-          meta.description = "All jobs required to pass CI";
-          constituents =
-            lib.collect lib.isDerivation inputs.self.hydraJobs.blockfrost-platform
-            ++ lib.collect lib.isDerivation inputs.self.hydraJobs.devshell;
+          inherit (inputs.self) checks;
         };
-      };
+      in
+        allJobs
+        // {
+          required = inputs.nixpkgs.legacyPackages.x86_64-linux.releaseTools.aggregate {
+            name = "github-required";
+            meta.description = "All jobs required to pass CI";
+            constituents = lib.collect lib.isDerivation allJobs;
+          };
+        };
 
       flake.nixConfig = {
         extra-substituters = ["https://cache.iog.io"];
