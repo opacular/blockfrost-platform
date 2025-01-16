@@ -32,11 +32,11 @@ in rec {
   };
 
   # For better caching:
-  cargoArtifacts = craneLib.buildDepsOnly commonArgs;
+  # cargoArtifacts = craneLib.buildDepsOnly commonArgs;
 
   package = craneLib.buildPackage (commonArgs
     // {
-      inherit cargoArtifacts;
+      # inherit cargoArtifacts;
       # Do not use build script in nix
       prePatch = ''
         sed -i -e '/^build =/d' Cargo.toml

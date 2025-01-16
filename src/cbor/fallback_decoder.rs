@@ -26,11 +26,11 @@ impl FallbackDecoder {
     /// Starts a new child process.
     pub fn spawn() -> Result<Self, AppError> {
         let search_roots = [
-            // Build script
-            "target/testgen-hs/extracted/testgen-hs",
             // Common paths
             "/usr/bin",
             "/bin",
+            // Build script
+            "target/testgen-hs/extracted/testgen-hs",
             // Docker
             "/app/testgen-hs",
         ];
@@ -114,8 +114,9 @@ impl FallbackDecoder {
         for root in roots {
             for entry in WalkDir::new(root).into_iter().filter_map(|e| e.ok()) {
                 let path = entry.path();
-                if path.is_file()
-                    && path.file_name().unwrap_or_default() == "testgen-hs"
+                let file_name = path.file_name().unwrap_or_default().to_string_lossy();
+                if file_name.starts_with("testgen-hs")
+                    && path.is_file()
                     && Self::is_executable(path)
                 {
                     return Ok(path.to_string_lossy().to_string());
