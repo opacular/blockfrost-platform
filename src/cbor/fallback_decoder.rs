@@ -1,6 +1,6 @@
 use crate::AppError;
 use std::io::{BufRead, BufReader, Write};
-use std::path::{Path, PathBuf};
+use std::path::{Path, PathBuf, MAIN_SEPARATOR};
 use std::process::{self as proc, Command};
 use std::sync::{
     atomic::{self, AtomicU32},
@@ -25,15 +25,19 @@ struct FDRequest {
 impl FallbackDecoder {
     /// Starts a new child process.
     pub fn spawn() -> Result<Self, AppError> {
-        let search_roots = [
-            // Common paths
-            "/usr/bin",
-            "/bin",
-            // Build script
-            "target/testgen-hs/extracted/testgen-hs",
-            // Docker
-            "/app/testgen-hs",
+        let mut search_roots = vec![
+            PathBuf::from("/usr/bin"),
+            PathBuf::from("/bin"),
+            PathBuf::from("target/testgen-hs/extracted/testgen-hs"),
+            PathBuf::from("/app/testgen-hs"),
         ];
+
+        if let Ok(path_var) = env::var("PATH") {
+            for dir in path_var.split(MAIN_SEPARATOR) {
+                search_roots.push(PathBuf::from(dir));
+            }
+        }
+
         let testgen_hs_lib = Self::find_testgen_hs(&search_roots).map_err(AppError::Server)?;
 
         info!("Using {} as a fallback CBOR error decoder", &testgen_hs_lib);
@@ -90,31 +94,40 @@ impl FallbackDecoder {
         })?
     }
 
-    /// Searches first for `testgen-hs` in your project root, then recursively in the specified
-    /// directories. Returns the first valid path found or an error if nothing is found.
-    pub fn find_testgen_hs(roots: &[&str]) -> Result<String, String> {
+    /// Searches for `testgen-hs` in multiple directories.
+    pub fn find_testgen_hs(roots: &[PathBuf]) -> Result<String, String> {
         // 1. Check project root
         let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
 
-        #[cfg_attr(not(target_os = "windows"), allow(unused_mut))]
-        let mut root_candidate: PathBuf = PathBuf::from(&manifest_dir).join("testgen-hs");
+        // 2. Check the TESTGEN_HS_PATH environment variable
+        if let Ok(val) = env::var("TESTGEN_HS_PATH") {
+            let candidate = PathBuf::from(val);
+            if candidate.is_file() && candidate.exists() {
+                return Ok(candidate.to_string_lossy().into_owned());
+            }
+        }
 
-        // On Windows, adjust the filename
+        // 3. Construct a potential path in the project root
+        #[cfg_attr(not(target_os = "windows"), allow(unused_mut))]
+        let mut root_candidate = PathBuf::from(&manifest_dir).join("testgen-hs");
+
+        // On Windows, add .exe suffix
         #[cfg(target_os = "windows")]
         {
             root_candidate.set_file_name("testgen-hs.exe");
         }
 
-        // If the file exists and responds to --version, return it
+        // 4. If that file exists and responds to --version, use it
         if Self::is_executable(root_candidate.as_path()) {
             return Ok(root_candidate.to_string_lossy().to_string());
         }
 
-        // 2. Not found in project root, so recursively walk the directories in `roots`
+        // 5. Recursively walk each directory in `roots` to find a matching file
         for root in roots {
             for entry in WalkDir::new(root).into_iter().filter_map(|e| e.ok()) {
                 let path = entry.path();
                 let file_name = path.file_name().unwrap_or_default().to_string_lossy();
+
                 if file_name.starts_with("testgen-hs")
                     && path.is_file()
                     && Self::is_executable(path)

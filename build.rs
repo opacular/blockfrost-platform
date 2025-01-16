@@ -124,6 +124,16 @@ fn main() {
     let version_output = String::from_utf8_lossy(&output.stdout);
     println!("testgen-hs version: {}", version_output.trim());
 
+    let testgen_lib_version = format!("testgen-hs {}", testgen_lib_version);
+
+    if version_output.trim() != testgen_lib_version {
+        panic!(
+            "Expected testgen-hs version {} but got {}",
+            version_output.trim(),
+            testgen_lib_version
+        );
+    }
+
     // Set environment variable for downstream build steps.
     println!(
         "cargo:rustc-env=TESTGEN_HS_PATH={}",
