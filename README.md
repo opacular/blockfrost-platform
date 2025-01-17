@@ -21,7 +21,7 @@ earning rewards.
 
 For detailed instructions on using the platform, visit our [end-user documentation
 site](https://platform.blockfrost.io/). To begin, check out our [quickstart
-guide](https://platform.blockfrost.io/getting-started).
+guide](https://platform.blockfrost.io/get-started).
 
 ## Join our community
 
