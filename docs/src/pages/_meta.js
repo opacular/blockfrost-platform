@@ -1,16 +1,16 @@
 let config = {
   index: "Introduction",
   "---": {
-    type: "separator"
+    type: "separator",
   },
   "get-started": "Getting started",
-  "installation": "Installation",
-  "usage": "Usage",
-  "options": "Advanced options",
+  installation: "Installation",
+  usage: "Usage",
+  options: "Advanced options",
   "---": {
-    type: "separator"
+    type: "separator",
   },
-  "faq": "FAQ",
+  faq: "FAQ",
 };
 
 export default config;

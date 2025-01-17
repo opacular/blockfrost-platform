@@ -1,4 +1,4 @@
-import { Callout, Table } from 'nextra/components'
+import { Callout, Table } from "nextra/components";
 
 # Running the platform from your command line
 
@@ -12,7 +12,8 @@ blockfrost-platform [OPTIONS] --network <NETWORK> \
 ```
 
 <Callout>
-For the full list of the command line options, run `blockfrost-platform --help`.
+  For the full list of the command line options, run `blockfrost-platform
+  --help`.
 </Callout>
 
 # Setting up systemd for your instance
@@ -39,7 +40,6 @@ REWARD_ADDR=addr1_rest_of_my_reward_address_that_holds_my_nft_license_provided_b
                                    --secret $SECRET \
                                    --reward-address $REWARD_ADDR
 ```
-
 
 Create a new `blockfrost-platform.service` file and add this to it:
 

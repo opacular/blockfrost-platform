@@ -1,10 +1,9 @@
-import { Callout, Table } from 'nextra/components'
+import { Callout, Table } from "nextra/components";
 
 # Running the platform using Docker
 
 Once you have the Docker image on your machine from the previous installation
 section, you can run it using:
-
 
 ```bash
 docker run -it --init --rm \
@@ -17,13 +16,14 @@ docker run -it --init --rm \
 ```
 
 <Callout>
-Make sure your Cardano node socket is attached as a volume, i.e. `-v /home/user/my_node.socket:/var/run/node.socket`.
+  Make sure your Cardano node socket is attached as a volume, i.e. `-v
+  /home/user/my_node.socket:/var/run/node.socket`.
 </Callout>
 <Callout>
-If you don't specify an IP address (i.e., `-p 3000:3000` instead 
-of `-p 127.0.0.1:3000:3000`) when publishing a container's ports, Docker
-publishes the port on all interfaces (address `0.0.0.0`) by default. These
-ports are externally accessible.
+  If you don't specify an IP address (i.e., `-p 3000:3000` instead of `-p
+  127.0.0.1:3000:3000`) when publishing a container's ports, Docker publishes
+  the port on all interfaces (address `0.0.0.0`) by default. These ports are
+  externally accessible.
 </Callout>
 
 # Running the entire cluster using Docker compose
@@ -41,11 +41,12 @@ NETWORK=preview docker compose -p mainnet --profile solitary up --build -d
 NETWORK=preview SECRET=my-secret REWARD_ADDRESS=my-reward-address docker compose -p mainnet up --build -d
 
 # Watch the build
-docker compose watch 
+docker compose watch
 ```
 
 Please note:
-* If you want to avoid running it in the background, omit the `-d` flag.
-* If you want to skip building, omit the `--build` flag.
-* Setting `-p mainnet` to the desired network will let you run on different networks without messing your node db. You can omit it if you plan to run on the same network always.
-* You don't need to provide `--node-socket-path` since it is  already handled inside `docker-compose.yml`.
+
+- If you want to avoid running it in the background, omit the `-d` flag.
+- If you want to skip building, omit the `--build` flag.
+- Setting `-p mainnet` to the desired network will let you run on different networks without messing your node db. You can omit it if you plan to run on the same network always.
+- You don't need to provide `--node-socket-path` since it is already handled inside `docker-compose.yml`.

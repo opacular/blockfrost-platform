@@ -26,5 +26,3 @@ guide](https://platform.blockfrost.io/getting-started).
 ## Join our community
 
 [Join us on Discord](https://discord.gg/inputoutput).
-
-
