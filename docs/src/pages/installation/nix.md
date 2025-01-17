@@ -14,7 +14,7 @@ git checkout main
 
 # To build a release version (recommended)
 # NOTE: this option will be available after the first release
-# git checkout v0.1 
+# git checkout v0.1
 
 # Build the project using nix
 nix build

@@ -1,4 +1,4 @@
-import { Tabs, Tab } from "nextra/components"
+import { Tabs, Tab } from "nextra/components";
 
 ## Building from the source code
 
@@ -19,13 +19,14 @@ First, we need to install dependencies on your system.
     apt install git rustup libssl-dev pkg-config
     ```
 
-   After installing `rustup`, you need to switch to latest stable Rust.
-   ```shell
-   rustup default stable
-   ```
+After installing `rustup`, you need to switch to latest stable Rust.
+
+```shell
+rustup default stable
+```
+
   </Tabs.Tab>
 </Tabs>
-
 
 ```bash
 # Clone the repository
@@ -39,7 +40,7 @@ git checkout main
 
 # To build a release version (recommended)
 # NOTE: this option will be available after the first release
-# git checkout v0.1 
+# git checkout v0.1
 
 # Build the project
 cargo build --release
