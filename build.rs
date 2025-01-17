@@ -8,7 +8,17 @@ use std::{
 use tar::Archive;
 use zip::ZipArchive;
 
+const TESTGEN_HS_PATH: &str = "TESTGEN_HS_PATH";
+
 fn main() {
+    if env::var(TESTGEN_HS_PATH).is_ok() {
+        println!(
+            "Environment variable {} is set. Exiting the build script.",
+            TESTGEN_HS_PATH
+        );
+        return;
+    }
+
     // Tell Cargo to rerun the build script if the build script itself changes.
     println!("cargo:rerun-if-changed=build.rs");
 
@@ -136,7 +146,8 @@ fn main() {
 
     // Set environment variable for downstream build steps.
     println!(
-        "cargo:rustc-env=TESTGEN_HS_PATH={}",
+        "cargo:rustc-env={}={}",
+        TESTGEN_HS_PATH,
         executable.to_string_lossy()
     );
 }

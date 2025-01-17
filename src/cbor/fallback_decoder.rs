@@ -313,6 +313,9 @@ mod tests {
     async fn test_fallback_decoder() {
         let decoder = FallbackDecoder::spawn().unwrap();
 
+        // Wait for it to come up:
+        decoder.startup_sanity_test().await.unwrap();
+
         // Now, kill our child to test the restart logic:
         sysinfo::System::new_all()
             .process(sysinfo::Pid::from_u32(decoder.child_pid().unwrap()))
