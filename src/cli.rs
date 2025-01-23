@@ -1,9 +1,8 @@
+use crate::AppError;
 use clap::{arg, command, Parser, ValueEnum};
 use pallas_network::miniprotocols::{MAINNET_MAGIC, PREPROD_MAGIC, PREVIEW_MAGIC};
 use std::fmt::{self, Formatter};
 use tracing::Level;
-
-use crate::AppError;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -45,6 +44,9 @@ pub struct Args {
         requires("secret")
     )]
     reward_address: Option<String>,
+
+    #[arg(long, default_value = "true", required = false)]
+    metrics: bool,
 }
 
 #[derive(Debug, Clone, ValueEnum)]
@@ -70,6 +72,7 @@ pub enum LogLevel {
     Trace,
 }
 
+#[derive(Clone)]
 pub struct Config {
     pub server_address: String,
     pub server_port: u16,
@@ -80,8 +83,10 @@ pub struct Config {
     pub icebreakers_config: Option<IcebreakersConfig>,
     pub max_pool_connections: usize,
     pub network: Network,
+    pub metrics: bool,
 }
 
+#[derive(Clone)]
 pub struct IcebreakersConfig {
     pub reward_address: String,
     pub secret: String,
@@ -108,6 +113,7 @@ impl Config {
             icebreakers_config,
             max_pool_connections: 10,
             network: args.network,
+            metrics: args.metrics,
         })
     }
 
