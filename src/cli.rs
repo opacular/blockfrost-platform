@@ -1,11 +1,15 @@
 use crate::AppError;
+use clap::CommandFactory;
 use clap::{arg, command, Parser, ValueEnum};
 use pallas_network::miniprotocols::{MAINNET_MAGIC, PREPROD_MAGIC, PREVIEW_MAGIC};
+use serde::{Deserialize, Serialize};
 use std::fmt::{self, Formatter};
 use tracing::Level;
+use twelf::{config, Layer};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
+#[config]
 pub struct Args {
     #[arg(long, default_value = "0.0.0.0")]
     server_address: String,
@@ -13,14 +17,14 @@ pub struct Args {
     #[arg(long, default_value = "3000")]
     server_port: u16,
 
-    #[arg(long, required = true)]
-    network: Network,
+    #[arg(long)]
+    network: Option<Network>,
 
     #[arg(long, default_value = "info")]
     log_level: LogLevel,
 
-    #[arg(long, required = true)]
-    node_socket_path: String,
+    #[arg(long)]
+    node_socket_path: Option<String>,
 
     #[arg(long, default_value = "compact")]
     mode: Mode,
@@ -29,41 +33,47 @@ pub struct Args {
     #[arg(long)]
     solitary: bool,
 
-    #[arg(
-        long,
-        required_unless_present("solitary"),
-        conflicts_with("solitary"),
-        requires("reward_address")
-    )]
+    #[arg(long)]
     secret: Option<String>,
 
-    #[arg(
-        long,
-        required_unless_present("solitary"),
-        conflicts_with("solitary"),
-        requires("secret")
-    )]
+    #[arg(long)]
     reward_address: Option<String>,
 
     #[arg(long, default_value = "true", required = false)]
     metrics: bool,
 }
 
-#[derive(Debug, Clone, ValueEnum)]
+impl Args {
+    pub fn init() -> Result<Config, AppError> {
+        let matches = Self::command().get_matches();
+        let arguments = Self::with_layers(&[
+            Layer::Env(Some(String::from("BLOCKFROST_"))),
+            Layer::Clap(matches),
+        ])
+        .map_err(|it| AppError::Server(it.to_string()))?;
+
+        Config::from_args(arguments)
+    }
+}
+
+#[derive(Debug, Clone, ValueEnum, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Mode {
     Compact,
     Light,
     Full,
 }
 
-#[derive(Debug, Clone, ValueEnum)]
+#[derive(Debug, Clone, ValueEnum, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Network {
     Mainnet,
     Preprod,
     Preview,
 }
 
-#[derive(Debug, Clone, ValueEnum)]
+#[derive(Debug, Clone, ValueEnum, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum LogLevel {
     Debug,
     Info,
@@ -94,13 +104,28 @@ pub struct IcebreakersConfig {
 
 impl Config {
     pub fn from_args(args: Args) -> Result<Self, AppError> {
-        let network_magic = Self::get_network_magic(&args.network);
-        let icebreakers_config = match (args.solitary, args.reward_address, args.secret) {
-            (false, Some(reward_address), Some(secret)) => Some(IcebreakersConfig {
+        let network = args
+            .network
+            .ok_or(AppError::Server("--network must be set".into()))?;
+        let node_socket_path = args
+            .node_socket_path
+            .ok_or(AppError::Server("--node-socket-path must be set".into()))?;
+
+        let network_magic = Self::get_network_magic(&network);
+
+        let icebreakers_config = if !args.solitary {
+            let reward_address = args
+                .reward_address
+                .ok_or(AppError::Server("--reward-address must be set".into()))?;
+            let secret = args
+                .secret
+                .ok_or(AppError::Server("--secret must be set".into()))?;
+            Some(IcebreakersConfig {
                 reward_address,
                 secret,
-            }),
-            _ => None,
+            })
+        } else {
+            None
         };
 
         Ok(Config {
@@ -108,12 +133,12 @@ impl Config {
             server_port: args.server_port,
             log_level: args.log_level.into(),
             network_magic,
-            node_socket_path: args.node_socket_path,
+            node_socket_path,
             mode: args.mode,
             icebreakers_config,
             max_pool_connections: 10,
-            network: args.network,
             metrics: args.metrics,
+            network,
         })
     }
 
