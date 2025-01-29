@@ -54,10 +54,7 @@ impl NodeClient {
                             submit_api_json
                         );
 
-                        Err(BlockfrostError::custom_400_details(
-                            error_message,
-                            submit_api_json,
-                        ))
+                        Err(BlockfrostError::custom_400(submit_api_json.to_string()))
                     }
 
                     Err(e) => {
