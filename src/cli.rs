@@ -43,12 +43,12 @@ pub struct Args {
     #[arg(long, default_value = "compact")]
     mode: Mode,
 
-    #[arg(long)]
+    #[arg(long, help = "Initialize a new configuration file")]
     #[serde(skip_serializing_if = "should_skip_serializng_fields")]
     #[serde(default)]
     init: bool,
 
-    #[arg(long)]
+    #[arg(long, help = "Path to an existing configuration file")]
     #[serde(skip_serializing_if = "should_skip_serializng_fields")]
     config: Option<PathBuf>,
 
@@ -69,26 +69,42 @@ pub struct Args {
 fn get_config_path() -> PathBuf {
     dirs::config_dir()
         .expect("Could not determine config directory")
-        .join("blockfrost")
+        .join("blockfrost-platform")
         .join("config.toml")
 }
 
 impl Args {
     fn parse_args(config_path: PathBuf) -> Result<Args, AppError> {
+        const ENV_PREFIX: &str = "BLOCKFROST_";
+
+        let no_config_file = !config_path.exists();
+        let no_env_vars = std::env::vars().all(|(key, _val)| !key.starts_with(ENV_PREFIX));
+        let empty_argv = std::env::args().len() == 1;
+        if no_config_file && no_env_vars && empty_argv {
+            Self::command().print_help().unwrap();
+            std::process::exit(1);
+        }
         let matches = Self::command().get_matches();
 
         let mut config_layers = vec![
-            Layer::Env(Some(String::from("BLOCKFROST_"))),
+            Layer::Env(Some(String::from(ENV_PREFIX))),
             Layer::Clap(matches),
         ];
         if config_path.exists() {
-            config_layers.insert(0, Layer::Toml(config_path));
+            config_layers.insert(0, Layer::Toml(config_path.clone()));
         }
 
-        Self::with_layers(&config_layers).map_err(|it| AppError::Server(it.to_string()))
+        Self::with_layers(&config_layers).map_err(|e| match e {
+            twelf::Error::Toml(_) => AppError::Server(format!(
+                "Failed to parse config file '{}'",
+                config_path.to_string_lossy()
+            )),
+            _ => AppError::Server(e.to_string()),
+        })
     }
     pub fn init() -> Result<Config, AppError> {
-        let config_path = get_config_path();
+        let initial_args = Args::parse();
+        let config_path = initial_args.config.unwrap_or(get_config_path());
 
         let arguments = Args::parse_args(config_path)?;
 
@@ -234,7 +250,7 @@ impl Args {
         }
 
         app_config.to_file(&config_path)?;
-        println!("Config has been written to {:?}", config_path);
+        println!("\nConfig has been written to {:?}", config_path);
 
         std::process::exit(0);
     }
@@ -288,9 +304,9 @@ pub struct IcebreakersConfig {
 
 impl Config {
     pub fn from_args(args: Args) -> Result<Self, AppError> {
-        let network = args
-            .network
-            .ok_or(AppError::Server("--network must be set".into()))?;
+        let network = args.network.ok_or(AppError::Server(
+            "--network must be set. [possible values: mainnet, preprod, preview]".into(),
+        ))?;
         let node_socket_path = args
             .node_socket_path
             .ok_or(AppError::Server("--node-socket-path must be set".into()))?;
