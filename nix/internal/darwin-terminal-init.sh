@@ -24,6 +24,8 @@ cat <<EOF
 
   … and pressing <${color_bold}ENTER${color_reset}>.
 
+  Documentation: https://platform.blockfrost.io/
+
 EOF
 
 exec "$SHELL" -i
