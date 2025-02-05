@@ -13,16 +13,16 @@ color_reset=$'\e[0m'
 
 cat <<EOF
 
-  Hello!
+  Welcome!
 
-  This terminal has been set up to allow easy running of ‘${color_bold}blockfrost-platform${color_reset}’.
+  This terminal is set up for easy execution of ‘${color_bold}blockfrost-platform${color_reset}’.
 
-  Try typing in one of:
+  Type one of the following commands:
 
     ${color_bold}blockfrost-platform --help${color_reset}
     ${color_bold}blockfrost-platform --init${color_reset}
 
-  … and pressing <${color_bold}ENTER${color_reset}>.
+  … and press <${color_bold}ENTER${color_reset}>.
 
 EOF
 
