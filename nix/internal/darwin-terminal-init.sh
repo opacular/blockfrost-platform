@@ -17,12 +17,14 @@ cat <<EOF
 
   This terminal is set up for easy execution of ‘${color_bold}blockfrost-platform${color_reset}’.
 
-  Type one of the following commands:
+  Run one of the following commands:
 
-    ${color_bold}blockfrost-platform --help${color_reset}
-    ${color_bold}blockfrost-platform --init${color_reset}
+   For setup: ${color_bold}blockfrost-platform --help${color_reset}
+   For help: ${color_bold}blockfrost-platform --init${color_reset}
 
   … and press <${color_bold}ENTER${color_reset}>.
+
+  For more information, visit: https://platform.blockfrost.io
 
 EOF
 
