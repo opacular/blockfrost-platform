@@ -289,9 +289,9 @@ impl Testgen {
             variant,
         );
 
-        let _ = child.kill().inspect_err(
-            |err| debug!(err = %err, "testgen-hs: child pid kill failed"),
-        );
+        let _ = child
+            .kill()
+            .inspect_err(|err| debug!(err = %err, "testgen-hs: child pid kill failed"));
         let _ = child
             .wait()
             .inspect_err(|err| debug!(err = %err, "testgen-hs: child pid wait failed"));
