@@ -214,7 +214,7 @@ jobs:
   coverage:
     name: Coverage
     runs-on: ubuntu-latest
-    needs: [build_and_test]
+    needs: [check_action_pins]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
@@ -231,7 +231,7 @@ jobs:
 
   oci_build:
     name: OCI Build (${{ matrix.arch }})
-    needs: [check_action_pins, static_checks]
+    needs: [check_action_pins]
     strategy:
       fail-fast: false
       matrix:
