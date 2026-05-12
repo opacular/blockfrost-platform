@@ -154,7 +154,7 @@ jobs:
   platform_integration_tests:
     name: Platform Integration Tests
     runs-on: [self-hosted, Linux, X64, nixos]
-    needs: [build_and_test, check_flake_lock]
+    needs: [check_flake_lock]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
@@ -169,7 +169,7 @@ jobs:
   blockfrost_integration_tests:
     name: ${{ matrix.mode == 'ignore-check' && 'Ignored' || 'Tests' }} (${{ matrix.network }})
     runs-on: [self-hosted, Linux, X64, nixos]
-    needs: [build_and_test, check_flake_lock]
+    needs: [check_flake_lock]
     strategy:
       fail-fast: false
       matrix:
