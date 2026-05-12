@@ -1,6 +1,7 @@
 use crate::hydra_server_bridge;
 use axum::Extension;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
+use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
@@ -83,8 +84,11 @@ pub enum BridgeMessage {
 pub async fn websocket_route(
     ws: WebSocketUpgrade,
     Extension(state): Extension<SdkBridgeState>,
-) -> impl IntoResponse {
-    ws.on_upgrade(|socket| event_loop::run(state, socket))
+) -> Result<impl IntoResponse, StatusCode> {
+    if state.hydras.is_none() {
+        return Err(StatusCode::NOT_FOUND);
+    }
+    Ok(ws.on_upgrade(|socket| event_loop::run(state, socket)))
 }
 
 /// The WebSocket event loop, passing messages between HTTP<->WebSocket, keeping
