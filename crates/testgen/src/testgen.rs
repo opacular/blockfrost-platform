@@ -291,10 +291,10 @@ impl Testgen {
 
         let _ = child
             .kill()
-            .inspect_err(|err| debug!(err = %err, "testgen-hs: child pid kill failed"));
+            .inspect_err(|err| warn!(err = %err, "Testgen: child pid kill failed"));
         let _ = child
             .wait()
-            .inspect_err(|err| debug!(err = %err, "testgen-hs: child pid wait failed"));
+            .inspect_err(|err| warn!(err = %err, "Testgen: child pid wait failed"));
         current_child_pid.store(u32::MAX, atomic::Ordering::Relaxed);
 
         result
