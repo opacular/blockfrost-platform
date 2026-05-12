@@ -19,11 +19,11 @@
     "blockfrost-tests": {
       "flake": false,
       "locked": {
-        "lastModified": 1778159801,
-        "narHash": "sha256-xaSATvoSqQJDgD1oiMEHcOftGqKaEOIb8i5GtPuzN9g=",
+        "lastModified": 1778511471,
+        "narHash": "sha256-1hSxxxhBGcjFPTQsKc8P1Jsl8B0QXaoBL/2wVPHqVHg=",
         "owner": "blockfrost",
         "repo": "blockfrost-tests",
-        "rev": "fd5a2ba52c4d8627def9f67b1153fb090979746e",
+        "rev": "3165af39c301ef583e7f85e29b4b3b15ba80fa88",
         "type": "github"
       },
       "original": {
@@ -363,16 +363,16 @@
     "testgen-hs": {
       "flake": false,
       "locked": {
-        "lastModified": 1775724489,
-        "narHash": "sha256-UiTRFhvLifxg/Ve9RJsOKRPLGQSOzAX6skd1Eq6QAms=",
-        "owner": "input-output-hk",
+        "lastModified": 1776089820,
+        "narHash": "sha256-Io/LO7dTDmRvVWLSNpxhH8fQcHcJeBrqviYgYnhgRiM=",
+        "owner": "blockfrost",
         "repo": "testgen-hs",
-        "rev": "df1ac503b267beb7bcbfc6b953cf214b04c03d30",
+        "rev": "358cd9124b62a9dc647a96687c272f540eb2f134",
         "type": "github"
       },
       "original": {
-        "owner": "input-output-hk",
-        "ref": "10.6.3.0",
+        "owner": "blockfrost",
+        "ref": "10.6.3.1",
         "repo": "testgen-hs",
         "type": "github"
       }
