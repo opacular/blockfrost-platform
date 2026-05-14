@@ -83,7 +83,7 @@ impl HydrasManager {
             .try_acquire_owned()
             .map_err(|_| {
                 let err = anyhow!(
-                    "Too many concurrent `hydra-node`s already running. You can increase the limit in config."
+                    "Too many concurrent Hydra sessions / in-flight key exchanges. You can increase the limit in config."
                 );
                 warn!("{err}");
                 err
