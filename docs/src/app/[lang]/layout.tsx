@@ -14,6 +14,22 @@ export async function generateStaticParams() {
   return [{ lang: "en" }, { lang: "ja" }];
 }
 
+const prefixPageMapRoutes = (items, lang) =>
+  items.map((item) => {
+    const next = { ...item };
+    if (
+      typeof next.route === "string" &&
+      next.route.startsWith("/") &&
+      !next.route.startsWith(`/${lang}`)
+    ) {
+      next.route = `/${lang}${next.route}`;
+    }
+    if (Array.isArray(next.children)) {
+      next.children = prefixPageMapRoutes(next.children, lang);
+    }
+    return next;
+  });
+
 export default async function LangLayout({ children, params }) {
   const { lang } = await params;
   const navbar = (
@@ -27,7 +43,8 @@ export default async function LangLayout({ children, params }) {
     </Navbar>
   );
 
-  const pageMap = await getPageMap(`/${lang}`);
+  const rawPageMap = await getPageMap(`/${lang}`);
+  const pageMap = prefixPageMapRoutes(rawPageMap, lang);
 
   return (
     <>
@@ -40,7 +57,10 @@ export default async function LangLayout({ children, params }) {
           content="https://blockfrost.io/images/og.png"
         />
         <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:image" content="https://blockfrost.io/images/og.png" />
+        <meta
+          name="twitter:image"
+          content="https://blockfrost.io/images/og.png"
+        />
       </Head>
       <script
         dangerouslySetInnerHTML={{
