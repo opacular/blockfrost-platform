@@ -41,8 +41,5 @@ install-state.gz
 out
 _pagefind
 
-# generated Orama search index
-public/search-index-*.json
-
 # TypeScript incremental build cache
 *.tsbuildinfo
