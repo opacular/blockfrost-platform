@@ -181,10 +181,12 @@ impl Args {
             .with_help_message("Should be run without icebreakers API?")
             .prompt()?;
 
-        let no_metrics = Confirm::new("Enable metrics?")
+        let enable_metrics = Confirm::new("Enable metrics?")
             .with_default(true)
             .with_help_message("Should metrics be enabled?")
             .prompt()?;
+
+        let no_metrics = !enable_metrics;
 
         let mode = Args::enum_prompt("Mode?", Mode::value_variants(), 0)
             .and_then(|it| Mode::from_str(it.as_str(), true).map_err(|e| anyhow!(e)))?;
