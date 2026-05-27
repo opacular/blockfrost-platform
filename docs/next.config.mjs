@@ -15,4 +15,8 @@ export default withNextra({
   output: "export",
   ...(basePath && { basePath }),
   images: { unoptimized: true },
+  i18n: {
+    locales: ["en", "ja"],
+    defaultLocale: "en",
+  },
 });
