@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "next dev --webpack",
-    "build": "next build --webpack && pagefind --site out --output-path out/_pagefind",
-    "pagefind-local": "pagefind --site out --output-path out/_pagefind",
+    "build": "next build --webpack && pagefind --site out --output-path public/_pagefind && next build --webpack",
+    "pagefind-local": "pagefind --site out --output-path public/_pagefind",
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit"
