@@ -1,19 +1,25 @@
-"use client";
-
-import { useEffect } from "react";
+export const metadata = {
+  title: "Blockfrost Platform Documentation",
+  robots: { index: false, follow: false },
+};
 
 export default function RootRedirect() {
-  useEffect(() => {
-    const sysLang = (
-      typeof navigator !== "undefined" ? navigator.language : ""
-    ).toLowerCase();
-    const target = sysLang.startsWith("ja") ? "/ja" : "/en";
-    window.location.replace(target);
-  }, []);
-
   return (
-    <p style={{ padding: "2rem", fontFamily: "system-ui, sans-serif" }}>
-      Redirecting to <a href="/en">documentation</a>…
-    </p>
+    <>
+      <style
+        dangerouslySetInnerHTML={{
+          __html: "html{visibility:hidden!important;background:#000}",
+        }}
+      />
+      <script
+        dangerouslySetInnerHTML={{
+          __html:
+            "(function(){try{var l=(navigator.language||'').toLowerCase();location.replace(l.indexOf('ja')===0?'/ja':'/en')}catch(e){location.replace('/en')}})();",
+        }}
+      />
+      <noscript>
+        <meta httpEquiv="refresh" content="0; url=/en" />
+      </noscript>
+    </>
   );
 }
