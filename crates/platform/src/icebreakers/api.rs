@@ -56,10 +56,12 @@ impl IcebreakersAPI {
 
                 let mut builder = Client::builder();
 
-                // Only bind outgoing requests to a specific local address when
-                // it's a real routable interface IP. EINVAL otherwise.
+                // Bind outgoing requests to the configured local address so
+                // that the IP family matches the server socket (e.g. 0.0.0.0
+                // forces an IPv4 socket, avoiding AAAA resolution). Skip only
+                // loopback, which can't route to external servers.
                 let addr = config.server_address;
-                if !addr.is_loopback() && !addr.is_unspecified() {
+                if !addr.is_loopback() {
                     builder = builder.local_address(addr);
                 }
 
