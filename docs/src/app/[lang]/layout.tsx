@@ -15,7 +15,7 @@ export async function generateStaticParams() {
 }
 
 const prefixPageMapRoutes = (items, lang) =>
-  items.map((item) => {
+  items.map(item => {
     const next = { ...item };
     if (
       typeof next.route === "string" &&
