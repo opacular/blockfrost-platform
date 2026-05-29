@@ -37,7 +37,7 @@ bf-node = { path = "crates/node", package = "blockfrost-platform-node" }
 bf-testgen = { path = "crates/testgen", package = "blockfrost-platform-testgen" }
 bip39 = "2.2.2"
 blockfrost = "1.2.4"
-blockfrost-openapi = "0.1.88"
+blockfrost-openapi = "0.1.87"
 bzip2 = "0.6.1"
 cardano-serialization-lib = "15.0.3"
 chrono = "0.4"
