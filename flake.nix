@@ -41,7 +41,7 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
     cardano-playground = {
-      url = "github:input-output-hk/cardano-playground/419fcc2150552930944624e7a19aad6420539df0";
+      url = "github:input-output-hk/cardano-playground/cf68b1e5747564fa25d5ea945b49fa900b4f7824";
       flake = false; # otherwise, +9k dependencies in flake.lock…
     };
     advisory-db = {
