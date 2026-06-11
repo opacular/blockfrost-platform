@@ -16,7 +16,7 @@ pub fn ensure() {
         return;
     }
 
-    let testgen_lib_version = "10.6.3.1";
+    let testgen_lib_version = "11.0.1.0";
 
     let target_os = super::target::os();
     let arch = super::target::arch();

@@ -29,7 +29,7 @@
     };
     mithril.url = "github:input-output-hk/mithril/2524.0";
     testgen-hs = {
-      url = "github:blockfrost/testgen-hs/1d724a0d814e001327ca2985215fb2f0b02ce3bf"; # make sure it follows cardano-node
+      url = "github:blockfrost/testgen-hs/11.0.1.0"; # make sure it follows cardano-node
       flake = false; # otherwise, +2k dependencies we don’t really use
     };
     hydra = {
