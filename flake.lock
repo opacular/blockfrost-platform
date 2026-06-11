@@ -35,16 +35,16 @@
     "cardano-node": {
       "flake": false,
       "locked": {
-        "lastModified": 1774886169,
-        "narHash": "sha256-TQHJmtgV33DhEeiOLokDS7BGTUX/4wdQt9DIP62SEuw=",
+        "lastModified": 1777953209,
+        "narHash": "sha256-+dod+EL73MICgbgflyJnwDlxbCeaBbBLrr2tLX59hAA=",
         "owner": "IntersectMBO",
         "repo": "cardano-node",
-        "rev": "e252edef4dfcd28ba8987e0c1368c6db0404beac",
+        "rev": "97036a66bcf8c89f687ae57a048eecc0389977ef",
         "type": "github"
       },
       "original": {
         "owner": "IntersectMBO",
-        "ref": "10.6.3",
+        "ref": "11.0.1",
         "repo": "cardano-node",
         "type": "github"
       }
@@ -98,7 +98,9 @@
     },
     "devshell": {
       "inputs": {
-        "nixpkgs": ["nixpkgs"]
+        "nixpkgs": [
+          "nixpkgs"
+        ]
       },
       "locked": {
         "lastModified": 1768818222,
@@ -133,7 +135,9 @@
     },
     "fenix": {
       "inputs": {
-        "nixpkgs": ["nixpkgs"],
+        "nixpkgs": [
+          "nixpkgs"
+        ],
         "rust-analyzer-src": "rust-analyzer-src"
       },
       "locked": {
@@ -359,23 +363,26 @@
     "testgen-hs": {
       "flake": false,
       "locked": {
-        "lastModified": 1776089820,
-        "narHash": "sha256-Io/LO7dTDmRvVWLSNpxhH8fQcHcJeBrqviYgYnhgRiM=",
+        "lastModified": 1781108723,
+        "narHash": "sha256-8TO4wZgSGGCB1AAeD0deZiGuNe14gHUJwvNGdEYAwck=",
         "owner": "blockfrost",
         "repo": "testgen-hs",
-        "rev": "358cd9124b62a9dc647a96687c272f540eb2f134",
+        "rev": "1d724a0d814e001327ca2985215fb2f0b02ce3bf",
         "type": "github"
       },
       "original": {
         "owner": "blockfrost",
-        "ref": "10.6.3.1",
         "repo": "testgen-hs",
+        "rev": "1d724a0d814e001327ca2985215fb2f0b02ce3bf",
         "type": "github"
       }
     },
     "treefmt-nix": {
       "inputs": {
-        "nixpkgs": ["mithril", "nixpkgs"]
+        "nixpkgs": [
+          "mithril",
+          "nixpkgs"
+        ]
       },
       "locked": {
         "lastModified": 1748243702,
@@ -393,7 +400,9 @@
     },
     "treefmt-nix_2": {
       "inputs": {
-        "nixpkgs": ["nixpkgs"]
+        "nixpkgs": [
+          "nixpkgs"
+        ]
       },
       "locked": {
         "lastModified": 1775636079,
