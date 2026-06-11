@@ -3,6 +3,8 @@ export const metadata = {
   robots: { index: false, follow: false },
 };
 
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
+
 export default function RootRedirect() {
   return (
     <>
@@ -13,12 +15,11 @@ export default function RootRedirect() {
       />
       <script
         dangerouslySetInnerHTML={{
-          __html:
-            "(function(){try{var l=(navigator.language||'').toLowerCase();location.replace(l.indexOf('ja')===0?'/ja':'/en')}catch(e){location.replace('/en')}})();",
+          __html: `(function(){try{var l=(navigator.language||'').toLowerCase();location.replace(l.indexOf('ja')===0?'${basePath}/ja':'${basePath}/en')}catch(e){location.replace('${basePath}/en')}})();`,
         }}
       />
       <noscript>
-        <meta httpEquiv="refresh" content="0; url=/en" />
+        <meta httpEquiv="refresh" content={`0; url=${basePath}/en`} />
       </noscript>
     </>
   );
