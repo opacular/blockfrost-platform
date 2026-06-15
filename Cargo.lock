@@ -177,7 +177,7 @@ checksum = "b169f7a6d4742236a0a00c541b845991d0ac43e546831af1249753ab4c3aa3a0"
 dependencies = [
  "cfg-if",
  "cipher",
- "cpufeatures",
+ "cpufeatures 0.2.17",
 ]
 
 [[package]]
@@ -398,24 +398,19 @@ checksum = "2dabbe35f96fb9507f7330793dc490461b2962659ac5d427181e451a623751d1"
 
 [[package]]
 name = "bech32"
-version = "0.9.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d86b93f97252c47b41663388e6d155714a9d0c398b99f1005cbc5f978b29f445"
-
-[[package]]
-name = "bech32"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32637268377fc7b10a8c6d51de3e7fba1ce5dd371a96e342b34e6078db558e7f"
 
 [[package]]
 name = "binary-layout"
-version = "3.3.0"
+version = "4.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5845e3504cf59b9588fff324710f27ee519515b8a8a9f1207042da9a9e64f819"
+checksum = "66c7e8da2156abef3421f6226ef339ade8c0d157ec50932d5e624f1c6a5127b4"
 dependencies = [
  "doc-comment",
  "paste",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -501,7 +496,7 @@ dependencies = [
  "cc",
  "cfg-if",
  "constant_time_eq",
- "cpufeatures",
+ "cpufeatures 0.2.17",
 ]
 
 [[package]]
@@ -927,6 +922,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "613afe47fcd5fac7ccf1db93babcb082c5994d996f20b8b159f2ad1658eb5724"
 
 [[package]]
+name = "chacha20"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6f8d983286843e49675a4b7a2d174efe136dc93a18d69130dd18198a6c167601"
+dependencies = [
+ "cfg-if",
+ "cpufeatures 0.3.0",
+ "rand_core 0.10.1",
+]
+
+[[package]]
 name = "chrono"
 version = "0.4.40"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1084,6 +1090,15 @@ name = "cpufeatures"
 version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "59ed5838eebb26a2bb2e58f6d5b5316989ae9d08bab10e0e6d103e656d1b0280"
+dependencies = [
+ "libc",
+]
+
+[[package]]
+name = "cpufeatures"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8b2a41393f66f16b0823bb79094d54ac5fbd34ab292ddafb9a0456ac9f87d201"
 dependencies = [
  "libc",
 ]
@@ -1836,6 +1851,7 @@ dependencies = [
  "js-sys",
  "libc",
  "r-efi",
+ "rand_core 0.10.1",
  "wasip2",
  "wasip3",
  "wasm-bindgen",
@@ -2399,6 +2415,15 @@ name = "itertools"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "413ee7dfc52ee1a4949ceeb7dbc8a33f2d6c088194d9f922fb8318faf1f01186"
+dependencies = [
+ "either",
+]
+
+[[package]]
+name = "itertools"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2b192c782037fadd9cfa75548310488aabdbf3d2da73885b31bd0abd03351285"
 dependencies = [
  "either",
 ]
@@ -3061,47 +3086,47 @@ dependencies = [
 
 [[package]]
 name = "pallas-addresses"
-version = "1.0.0-alpha.5"
-source = "git+https://github.com/txpipe/pallas.git?rev=ed422bc0d5a09f77617d4882dd4c71089a8bcdb2#ed422bc0d5a09f77617d4882dd4c71089a8bcdb2"
+version = "1.0.0"
+source = "git+https://github.com/txpipe/pallas.git?rev=3e87e6c704a6c3fac7ef02a633465592fd2730f0#3e87e6c704a6c3fac7ef02a633465592fd2730f0"
 dependencies = [
  "base58",
- "bech32 0.9.1",
+ "bech32 0.11.1",
  "crc",
  "cryptoxide",
  "hex",
  "pallas-codec",
  "pallas-crypto",
- "thiserror 1.0.69",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
 name = "pallas-codec"
-version = "1.0.0-alpha.5"
-source = "git+https://github.com/txpipe/pallas.git?rev=ed422bc0d5a09f77617d4882dd4c71089a8bcdb2#ed422bc0d5a09f77617d4882dd4c71089a8bcdb2"
+version = "1.0.0"
+source = "git+https://github.com/txpipe/pallas.git?rev=3e87e6c704a6c3fac7ef02a633465592fd2730f0#3e87e6c704a6c3fac7ef02a633465592fd2730f0"
 dependencies = [
  "hex",
  "minicbor",
  "serde",
- "thiserror 1.0.69",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
 name = "pallas-crypto"
-version = "1.0.0-alpha.5"
-source = "git+https://github.com/txpipe/pallas.git?rev=ed422bc0d5a09f77617d4882dd4c71089a8bcdb2#ed422bc0d5a09f77617d4882dd4c71089a8bcdb2"
+version = "1.0.0"
+source = "git+https://github.com/txpipe/pallas.git?rev=3e87e6c704a6c3fac7ef02a633465592fd2730f0#3e87e6c704a6c3fac7ef02a633465592fd2730f0"
 dependencies = [
  "cryptoxide",
  "hex",
  "pallas-codec",
- "rand_core 0.9.3",
+ "rand_core 0.10.1",
  "serde",
- "thiserror 1.0.69",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
 name = "pallas-hardano"
-version = "1.0.0-alpha.5"
-source = "git+https://github.com/txpipe/pallas.git?rev=ed422bc0d5a09f77617d4882dd4c71089a8bcdb2#ed422bc0d5a09f77617d4882dd4c71089a8bcdb2"
+version = "1.0.0"
+source = "git+https://github.com/txpipe/pallas.git?rev=3e87e6c704a6c3fac7ef02a633465592fd2730f0#3e87e6c704a6c3fac7ef02a633465592fd2730f0"
 dependencies = [
  "binary-layout",
  "hex",
@@ -3114,31 +3139,31 @@ dependencies = [
  "serde_json",
  "serde_with",
  "tap",
- "thiserror 1.0.69",
+ "thiserror 2.0.18",
  "tracing",
 ]
 
 [[package]]
 name = "pallas-network"
-version = "1.0.0-alpha.5"
-source = "git+https://github.com/txpipe/pallas.git?rev=ed422bc0d5a09f77617d4882dd4c71089a8bcdb2#ed422bc0d5a09f77617d4882dd4c71089a8bcdb2"
+version = "1.0.0"
+source = "git+https://github.com/txpipe/pallas.git?rev=3e87e6c704a6c3fac7ef02a633465592fd2730f0#3e87e6c704a6c3fac7ef02a633465592fd2730f0"
 dependencies = [
  "byteorder",
  "hex",
- "itertools 0.13.0",
+ "itertools 0.14.0",
  "pallas-codec",
  "pallas-crypto",
- "rand 0.8.5",
- "socket2 0.5.9",
- "thiserror 1.0.69",
+ "rand 0.10.1",
+ "socket2 0.6.3",
+ "thiserror 2.0.18",
  "tokio",
  "tracing",
 ]
 
 [[package]]
 name = "pallas-primitives"
-version = "1.0.0-alpha.5"
-source = "git+https://github.com/txpipe/pallas.git?rev=ed422bc0d5a09f77617d4882dd4c71089a8bcdb2#ed422bc0d5a09f77617d4882dd4c71089a8bcdb2"
+version = "1.0.0"
+source = "git+https://github.com/txpipe/pallas.git?rev=3e87e6c704a6c3fac7ef02a633465592fd2730f0#3e87e6c704a6c3fac7ef02a633465592fd2730f0"
 dependencies = [
  "hex",
  "pallas-codec",
@@ -3149,18 +3174,18 @@ dependencies = [
 
 [[package]]
 name = "pallas-traverse"
-version = "1.0.0-alpha.5"
-source = "git+https://github.com/txpipe/pallas.git?rev=ed422bc0d5a09f77617d4882dd4c71089a8bcdb2#ed422bc0d5a09f77617d4882dd4c71089a8bcdb2"
+version = "1.0.0"
+source = "git+https://github.com/txpipe/pallas.git?rev=3e87e6c704a6c3fac7ef02a633465592fd2730f0#3e87e6c704a6c3fac7ef02a633465592fd2730f0"
 dependencies = [
  "hex",
- "itertools 0.13.0",
+ "itertools 0.14.0",
  "pallas-addresses",
  "pallas-codec",
  "pallas-crypto",
  "pallas-primitives",
  "paste",
  "serde",
- "thiserror 1.0.69",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -3416,6 +3441,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "rand"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d2e8e8bcc7961af1fdac401278c6a831614941f6164ee3bf4ce61b7edb162207"
+dependencies = [
+ "chacha20",
+ "getrandom 0.4.1",
+ "rand_core 0.10.1",
+]
+
+[[package]]
 name = "rand_chacha"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3467,6 +3503,12 @@ checksum = "99d9a13982dcf210057a8a78572b2217b667c3beacbf3a0d8b454f6f82837d38"
 dependencies = [
  "getrandom 0.3.2",
 ]
+
+[[package]]
+name = "rand_core"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "63b8176103e19a2643978565ca18b50549f6101881c443590420e4dc998a3c69"
 
 [[package]]
 name = "rand_os"
@@ -4171,7 +4213,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e3bf829a2d51ab4a5ddf1352d8470c140cadc8301b2ae1789db023f01cedd6ba"
 dependencies = [
  "cfg-if",
- "cpufeatures",
+ "cpufeatures 0.2.17",
  "digest 0.10.7",
 ]
 
@@ -4183,7 +4225,7 @@ checksum = "4d58a1e1bf39749807d89cf2d98ac2dfa0ff1cb3faa38fbb64dd88ac8013d800"
 dependencies = [
  "block-buffer 0.9.0",
  "cfg-if",
- "cpufeatures",
+ "cpufeatures 0.2.17",
  "digest 0.9.0",
  "opaque-debug",
 ]
@@ -4195,7 +4237,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a7507d819769d01a365ab707794a4084392c824f54a7a6a7862f8c3d0892b283"
 dependencies = [
  "cfg-if",
- "cpufeatures",
+ "cpufeatures 0.2.17",
  "digest 0.10.7",
 ]
 
