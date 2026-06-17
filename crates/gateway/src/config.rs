@@ -128,9 +128,7 @@ pub fn load_config(path: PathBuf) -> Config {
     };
 
     let connection_string = match toml_config.database.connection_string_file {
-        Some(file_path) => read_to_string(file_path)
-            .expect("Failed to read connection string file")
-            .to_string(),
+        Some(file_path) => read_secret_file(&file_path, "connection string"),
         None => toml_config
             .database
             .connection_string
@@ -138,13 +136,11 @@ pub fn load_config(path: PathBuf) -> Config {
     };
 
     let project_id = match toml_config.blockfrost.project_id_file {
-        Some(file_path) => read_to_string(file_path)
-            .expect("Failed to read project ID file")
-            .to_string(),
+        Some(file_path) => read_secret_file(&file_path, "project ID"),
         None => toml_config
             .blockfrost
             .project_id
-            .expect("project_id must be provided"),
+            .expect("project_id or project_id_file must be provided"),
     };
 
     let network = network_from_project_id(&project_id).expect("invalid Blockfrost project_id");
@@ -155,10 +151,7 @@ pub fn load_config(path: PathBuf) -> Config {
     }
 
     let peer_secret_raw = match toml_config.server.peer_secret_file {
-        Some(file_path) => read_to_string(file_path)
-            .expect("Failed to read peer secret file")
-            .trim()
-            .to_string(),
+        Some(file_path) => read_secret_file(&file_path, "peer secret"),
         None => toml_config
             .server
             .peer_secret
@@ -185,6 +178,13 @@ pub fn load_config(path: PathBuf) -> Config {
     };
 
     override_with_env(config)
+}
+
+fn read_secret_file(path: &str, what: &str) -> String {
+    read_to_string(path)
+        .unwrap_or_else(|e| panic!("Failed to read {what} file '{path}': {e}"))
+        .trim()
+        .to_string()
 }
 
 /// Derive a 32-byte key from an arbitrary-length secret string using Blake3.
@@ -241,13 +241,7 @@ fn override_with_env(config: Config) -> Config {
         .unwrap_or(config.server.peer_urls);
     let peer_secret = var("BLOCKFROST_GATEWAY_SERVER_PEER_SECRET_FILE")
         .ok()
-        .map(|path| {
-            let raw = read_to_string(path)
-                .expect("Failed to read BLOCKFROST_GATEWAY_SERVER_PEER_SECRET_FILE")
-                .trim()
-                .to_string();
-            derive_peer_key(&raw)
-        })
+        .map(|path| derive_peer_key(&read_secret_file(&path, "peer secret")))
         .or_else(|| {
             var("BLOCKFROST_GATEWAY_SERVER_PEER_SECRET")
                 .ok()
@@ -290,5 +284,37 @@ fn override_with_env(config: Config) -> Config {
         },
         hydra_platform: config.hydra_platform,
         hydra_bridge: config.hydra_bridge,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs::write;
+
+    #[test]
+    fn read_secret_file_trims_surrounding_whitespace() {
+        let path = std::env::temp_dir().join(format!(
+            "blockfrost_gateway_secret_test_{}.txt",
+            std::process::id()
+        ));
+        write(&path, "  mainnetSomeProjectId\n").expect("write temp secret");
+
+        let value = read_secret_file(&path.to_string_lossy(), "test secret");
+        assert_eq!(value, "mainnetSomeProjectId");
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    #[should_panic(expected = "Failed to read test secret file")]
+    fn read_secret_file_panics_on_missing_file() {
+        let path = std::env::temp_dir().join(format!(
+            "blockfrost_gateway_missing_secret_{}.txt",
+            std::process::id()
+        ));
+        std::fs::remove_file(&path).ok();
+
+        read_secret_file(&path.to_string_lossy(), "test secret");
     }
 }
