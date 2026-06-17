@@ -24,7 +24,7 @@
       flake = false;
     };
     blockfrost-tests = {
-      url = "github:blockfrost/blockfrost-tests/pull/93/head";
+      url = "github:blockfrost/blockfrost-tests";
       flake = false;
     };
     mithril.url = "github:input-output-hk/mithril/2617.0";
