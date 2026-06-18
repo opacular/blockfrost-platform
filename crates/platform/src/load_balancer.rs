@@ -25,8 +25,6 @@ const WS_PING_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(13);
 /// How long we allow Axum to work on a [`JsonRequest`].
 const REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
 
-const MAX_BODY_BYTES: usize = 1024 * 1024;
-
 /// How long to wait before retrying a failed WebSocket connection.
 const RECONNECT_DELAY: std::time::Duration = std::time::Duration::from_secs(15);
 
@@ -55,6 +53,7 @@ pub async fn run_all(
         mpsc::Sender<hydra_client::TerminateRequest>,
     )>,
     icebreakers_api: Arc<IcebreakersAPI>,
+    max_response_body_bytes: usize,
 ) {
     let mut active: HashMap<String, JoinHandle<()>> = HashMap::new();
     // Move into a mutable binding so we can `.take()` it exactly once — the
@@ -93,6 +92,7 @@ pub async fn run_all(
                         &health_errors,
                         &api_prefix,
                         &icebreakers_api,
+                        max_response_body_bytes,
                     );
                 }
             },
@@ -138,6 +138,7 @@ fn reconcile_connections(
     health_errors: &Arc<Mutex<Vec<BlockfrostError>>>,
     api_prefix: &ApiPrefix,
     icebreakers_api: &Arc<IcebreakersAPI>,
+    max_response_body_bytes: usize,
 ) {
     // Clean up finished tasks so stale entries don't prevent re-spawning a
     // URI that came back.
@@ -185,6 +186,7 @@ fn reconcile_connections(
                     None
                 },
                 icebreakers_api.clone(),
+                max_response_body_bytes,
             ));
             active.insert(config.uri.clone(), handle);
         }
@@ -214,6 +216,7 @@ async fn run_one_with_reconnect(
         mpsc::Sender<hydra_client::TerminateRequest>,
     )>,
     icebreakers_api: Arc<IcebreakersAPI>,
+    max_response_body_bytes: usize,
 ) {
     loop {
         let result = event_loop::run(
@@ -222,6 +225,7 @@ async fn run_one_with_reconnect(
             health_errors.clone(),
             api_prefix.clone(),
             hydra_kex.clone(),
+            max_response_body_bytes,
         )
         .await;
 
@@ -374,6 +378,7 @@ mod event_loop {
             mpsc::Sender<hydra_client::KeyExchangeResponse>,
             mpsc::Sender<hydra_client::TerminateRequest>,
         )>,
+        max_response_body_bytes: usize,
     ) -> Result<(), String> {
         let socket = connect(config.clone()).await?;
         *health_errors.lock().await = vec![];
@@ -507,7 +512,8 @@ mod event_loop {
                     let event_tx = event_tx.clone();
                     let api_prefix = api_prefix.clone();
                     tokio::spawn(async move {
-                        let response = handle_one(router, request, api_prefix).await;
+                        let response =
+                            handle_one(router, request, api_prefix, max_response_body_bytes).await;
                         let _ignored_failure: Result<_, _> =
                             event_tx.send(LBEvent::NewResponse(response)).await;
                     });
@@ -733,6 +739,7 @@ mod event_loop {
         http_router: axum::Router,
         request: JsonRequest,
         api_prefix: ApiPrefix,
+        max_response_body_bytes: usize,
     ) -> JsonResponse {
         use axum::body::Body;
         use hyper::StatusCode;
@@ -756,7 +763,7 @@ mod event_loop {
                     })?
                     .unwrap(); // unwrap is safe, because the error is a non-instantiable [`std::convert::Infallible`]
 
-            response_to_json(response, request_id).await
+            response_to_json(response, request_id, max_response_body_bytes).await
         }
         .await;
 
@@ -824,6 +831,7 @@ fn json_to_request(
 async fn response_to_json(
     response: hyper::Response<axum::body::Body>,
     request_id: RequestId,
+    max_response_body_bytes: usize,
 ) -> Result<JsonResponse, (hyper::StatusCode, String)> {
     use hyper::StatusCode;
 
@@ -842,7 +850,7 @@ async fn response_to_json(
 
     let body_base64: String = {
         let body = response.into_body();
-        let body_bytes = axum::body::to_bytes(body, MAX_BODY_BYTES)
+        let body_bytes = axum::body::to_bytes(body, max_response_body_bytes)
             .await
             .map_err(|err| {
                 (

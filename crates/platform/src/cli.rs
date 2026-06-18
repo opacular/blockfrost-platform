@@ -42,6 +42,9 @@ pub struct Args {
     #[arg(long, default_value = "8192")]
     pub server_concurrency_limit: usize,
 
+    #[arg(long, default_value = "10485760")]
+    pub max_response_body_bytes: usize,
+
     #[arg(long, default_value = "info")]
     pub log_level: LogLevel,
 
@@ -281,6 +284,7 @@ impl Args {
             data_node: data_node.endpoint,
             data_node_timeout: Some(data_node.request_timeout),
             server_concurrency_limit: 8192,
+            max_response_body_bytes: 10_485_760,
             gateway_url: None,
             hydra_cardano_signing_key: None,
         };
