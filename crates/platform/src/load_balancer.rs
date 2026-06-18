@@ -34,6 +34,15 @@ const INITIAL_REGISTER_RETRY: std::time::Duration = std::time::Duration::from_se
 /// How often the supervisor re-registers to detect gateway list changes.
 const PERIODIC_REREGISTER: std::time::Duration = std::time::Duration::from_secs(30 * 60);
 
+#[derive(Clone)]
+struct ConnContext {
+    http_router: axum::Router,
+    health_errors: Arc<Mutex<Vec<BlockfrostError>>>,
+    api_prefix: ApiPrefix,
+    icebreakers_api: Arc<IcebreakersAPI>,
+    max_response_body_bytes: usize,
+}
+
 /// Supervises WebSocket connections to gateways.
 ///
 /// Handles the full lifecycle:
@@ -55,6 +64,14 @@ pub async fn run_all(
     icebreakers_api: Arc<IcebreakersAPI>,
     max_response_body_bytes: usize,
 ) {
+    let ctx = ConnContext {
+        http_router,
+        health_errors,
+        api_prefix,
+        icebreakers_api,
+        max_response_body_bytes,
+    };
+
     let mut active: HashMap<String, JoinHandle<()>> = HashMap::new();
     // Move into a mutable binding so we can `.take()` it exactly once — the
     // first connection in the first successful batch gets it.
@@ -66,10 +83,10 @@ pub async fn run_all(
         } else {
             info!("periodic re-registration with Icebreakers API...");
         }
-        match icebreakers_api.register().await {
+        match ctx.icebreakers_api.register().await {
             Ok(response) => {
                 // A successful registration supersedes any earlier failure:
-                health_errors.lock().await.clear();
+                ctx.health_errors.lock().await.clear();
 
                 let new_configs: Vec<_> = response.load_balancers.into_iter().flatten().collect();
 
@@ -84,22 +101,13 @@ pub async fn run_all(
                         );
                     }
                 } else {
-                    reconcile_connections(
-                        &new_configs,
-                        &mut active,
-                        &mut hydra_kex,
-                        &http_router,
-                        &health_errors,
-                        &api_prefix,
-                        &icebreakers_api,
-                        max_response_body_bytes,
-                    );
+                    reconcile_connections(&ctx, &new_configs, &mut active, &mut hydra_kex);
                 }
             },
             Err(err) => {
                 if active.is_empty() {
                     error!("registration failed: {}", err);
-                    *health_errors.lock().await = vec![err.into()];
+                    *ctx.health_errors.lock().await = vec![err.into()];
                 } else {
                     warn!(
                         "periodic re-registration failed: {}; \
@@ -127,6 +135,7 @@ pub async fn run_all(
 /// existing connections untouched.
 #[allow(clippy::type_complexity)]
 fn reconcile_connections(
+    ctx: &ConnContext,
     new_configs: &[LoadBalancerConfig],
     active: &mut HashMap<String, JoinHandle<()>>,
     hydra_kex: &mut Option<(
@@ -134,11 +143,6 @@ fn reconcile_connections(
         mpsc::Sender<hydra_client::KeyExchangeResponse>,
         mpsc::Sender<hydra_client::TerminateRequest>,
     )>,
-    http_router: &axum::Router,
-    health_errors: &Arc<Mutex<Vec<BlockfrostError>>>,
-    api_prefix: &ApiPrefix,
-    icebreakers_api: &Arc<IcebreakersAPI>,
-    max_response_body_bytes: usize,
 ) {
     // Clean up finished tasks so stale entries don't prevent re-spawning a
     // URI that came back.
@@ -174,10 +178,8 @@ fn reconcile_connections(
                 info!("new gateway {} discovered; starting task", config.uri);
             }
             let handle = tokio::spawn(run_one_with_reconnect(
+                ctx.clone(),
                 config.clone(),
-                http_router.clone(),
-                health_errors.clone(),
-                api_prefix.clone(),
                 // FIXME: for now, only pass hydra_kex to the very first
                 // connection in the very first batch.
                 if first_batch && idx == 0 {
@@ -185,8 +187,6 @@ fn reconcile_connections(
                 } else {
                     None
                 },
-                icebreakers_api.clone(),
-                max_response_body_bytes,
             ));
             active.insert(config.uri.clone(), handle);
         }
@@ -206,28 +206,16 @@ fn reconcile_connections(
 /// finished task).
 #[allow(clippy::type_complexity)]
 async fn run_one_with_reconnect(
+    ctx: ConnContext,
     mut config: LoadBalancerConfig,
-    http_router: axum::Router,
-    health_errors: Arc<Mutex<Vec<BlockfrostError>>>,
-    api_prefix: ApiPrefix,
     hydra_kex: Option<(
         watch::Sender<Option<mpsc::Sender<hydra_client::KeyExchangeRequest>>>,
         mpsc::Sender<hydra_client::KeyExchangeResponse>,
         mpsc::Sender<hydra_client::TerminateRequest>,
     )>,
-    icebreakers_api: Arc<IcebreakersAPI>,
-    max_response_body_bytes: usize,
 ) {
     loop {
-        let result = event_loop::run(
-            config.clone(),
-            http_router.clone(),
-            health_errors.clone(),
-            api_prefix.clone(),
-            hydra_kex.clone(),
-            max_response_body_bytes,
-        )
-        .await;
+        let result = event_loop::run(ctx.clone(), config.clone(), hydra_kex.clone()).await;
 
         match &result {
             Ok(()) => {
@@ -247,7 +235,7 @@ async fn run_one_with_reconnect(
         // fails (e.g. the registration gateway is down), keep the old token
         // and attempt the WebSocket connection anyway:
         info!("re-registering to refresh token for {}", config.uri);
-        match icebreakers_api.register().await {
+        match ctx.icebreakers_api.register().await {
             Ok(response) => {
                 let new_configs: Vec<_> = response.load_balancers.into_iter().flatten().collect();
                 if new_configs.is_empty() {
@@ -369,19 +357,16 @@ mod event_loop {
     // FIXME: refactor
     #[allow(clippy::type_complexity)]
     pub async fn run(
+        ctx: ConnContext,
         config: LoadBalancerConfig,
-        http_router: axum::Router,
-        health_errors: Arc<Mutex<Vec<BlockfrostError>>>,
-        api_prefix: ApiPrefix,
         hydra_kex: Option<(
             watch::Sender<Option<mpsc::Sender<hydra_client::KeyExchangeRequest>>>,
             mpsc::Sender<hydra_client::KeyExchangeResponse>,
             mpsc::Sender<hydra_client::TerminateRequest>,
         )>,
-        max_response_body_bytes: usize,
     ) -> Result<(), String> {
         let socket = connect(config.clone()).await?;
-        *health_errors.lock().await = vec![];
+        *ctx.health_errors.lock().await = vec![];
 
         let (event_tx, mut event_rx) = mpsc::channel::<LBEvent>(64);
         let (socket_tx, request_task, arbitrary_msg_task) =
@@ -508,9 +493,10 @@ mod event_loop {
                 },
 
                 LBEvent::NewLoadBalancerMessage(LoadBalancerMessage::Request(request)) => {
-                    let router = http_router.clone(); // cheap, and Axum also does it for each request
+                    let router = ctx.http_router.clone(); // cheap, and Axum also does it for each request
                     let event_tx = event_tx.clone();
-                    let api_prefix = api_prefix.clone();
+                    let api_prefix = ctx.api_prefix.clone();
+                    let max_response_body_bytes = ctx.max_response_body_bytes;
                     tokio::spawn(async move {
                         let response =
                             handle_one(router, request, api_prefix, max_response_body_bytes).await;
