@@ -18,6 +18,7 @@ connection_string = 'postgresql://user:pass@host:port/db'
 
 [blockfrost]
 project_id = 'preview_BLOCKFROST_PROJECT_ID'
+#project_id_file = '/run/keys/blockfrost-gateway-project-id'
 nft_asset = '4213fc3eac8c781ac85514dd1de9aaabcd5a3a81cc2df4f413b9b295'
 
 [hydra_platform]
