@@ -41,6 +41,16 @@
   "/epochs/latest/parameters",
   "/genesis",
   "/addresses/{address}/transactions",
+  "/addresses/{address}/txs",
   "/addresses/{address}/utxos",
-  "/addresses/{address}"
+  "/addresses/{address}",
+  "/assets/{asset}/addresses",
+  "/assets/{asset}/transactions",
+  "/epochs/{number}/blocks",
+  "/pools/{pool_id}/history",
+  "/scripts/{script_hash}",
+  "/scripts/{script_hash}/json",
+  "/scripts/{script_hash}/cbor",
+  "/scripts/datum/{datum_hash}",
+  "/scripts/datum/{datum_hash}/cbor"
 ]

@@ -119,6 +119,14 @@
     {
       "_comment": "blocks/0",
       "id": "blocks-hash-or-number-first-blocks-0-4_8a1bd8d1903e"
+    },
+    {
+      "_comment": "addresses/addr_vkh12ux0cq59haf8ydty5577ztxzh9qcvhjn7xxaj4xr55esx49uztj/txs?order=asc&page=128, addresses/addr_vkh12ux0cq59haf8ydty5577ztxzh9qcvhjn7xxaj4xr55esx49uztj/txs?page=128 -- Dolos returns HTTP 400 (pagination scan limit: page*count=12800 > max_scan_items=3000) while the real Blockfrost API returns the full array",
+      "id": "addresses-address-txs-generic-payment-cred-1_a8e5c9c0ea73"
+    },
+    {
+      "_comment": "addresses/addr_vkh12ux0cq59haf8ydty5577ztxzh9qcvhjn7xxaj4xr55esx49uztj/txs?order=asc&page=12800&count=1 -- Dolos returns HTTP 400 (pagination scan limit: page*count=12800 > max_scan_items=3000) while the real Blockfrost API returns the full array",
+      "id": "addresses-address-txs-generic-payment-cred-2_ba6a4f5de054"
     }
   ]
 }
