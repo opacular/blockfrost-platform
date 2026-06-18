@@ -19,6 +19,7 @@ pub struct Config {
     pub server_address: std::net::IpAddr,
     pub server_port: u16,
     pub server_concurrency_limit: usize,
+    pub max_response_body_bytes: usize,
     pub log_level: Level,
     pub node_socket_path: String,
     pub mode: Mode,
@@ -130,6 +131,7 @@ impl Config {
             data_node,
             hydra,
             server_concurrency_limit: args.server_concurrency_limit,
+            max_response_body_bytes: args.max_response_body_bytes,
         })
     }
 

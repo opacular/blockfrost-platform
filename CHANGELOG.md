@@ -1,7 +1,13 @@
 ## [Unreleased]
 
+### Added
+
+- New endpoints proxied to the data node: `/accounts/{stake_address}/utxos` and `/addresses/{address}`
+- `--max-response-body-bytes` to configure the maximum proxied response body size (default 10 MiB)
+
 ### Fixed
 
+- Raised the proxied body limit from 1 MiB to 10 MiB
 - Restored `local_address` bind for unspecified IPs like `0.0.0.0`, fixing an IPv6 regression that broke the IPv4-forcing behavior of `--server-address 0.0.0.0`
 - Inverted the metrics answer in the `--init` config prompt
 
