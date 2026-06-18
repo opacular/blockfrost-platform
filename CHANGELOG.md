@@ -2,6 +2,7 @@
 
 ### Added
 
+- New endpoints proxied to the data node: `/accounts/{stake_address}/utxos` and `/addresses/{address}`
 - `--max-response-body-bytes` to configure the maximum proxied response body size (default 10 MiB)
 
 ### Fixed
