@@ -67,13 +67,13 @@ nix = { version = "0.30", default-features = false, features = ["signal"] }
 ntest = "0.9.5"
 num_cpus = "1"
 # FIXME: use a proper Pallas release after they merge <https://github.com/txpipe/pallas/pull/624>:
-pallas-addresses = { git = "https://github.com/txpipe/pallas.git", rev = "ed422bc0d5a09f77617d4882dd4c71089a8bcdb2" }
-pallas-codec = { git = "https://github.com/txpipe/pallas.git", rev = "ed422bc0d5a09f77617d4882dd4c71089a8bcdb2" }
-pallas-crypto = { git = "https://github.com/txpipe/pallas.git", rev = "ed422bc0d5a09f77617d4882dd4c71089a8bcdb2" }
-pallas-hardano = { git = "https://github.com/txpipe/pallas.git", rev = "ed422bc0d5a09f77617d4882dd4c71089a8bcdb2" }
-pallas-network = { git = "https://github.com/txpipe/pallas.git", rev = "ed422bc0d5a09f77617d4882dd4c71089a8bcdb2" }
-pallas-primitives = { git = "https://github.com/txpipe/pallas.git", rev = "ed422bc0d5a09f77617d4882dd4c71089a8bcdb2" }
-pallas-traverse = { git = "https://github.com/txpipe/pallas.git", rev = "ed422bc0d5a09f77617d4882dd4c71089a8bcdb2" }
+pallas-addresses = { git = "https://github.com/txpipe/pallas.git", rev = "3e87e6c704a6c3fac7ef02a633465592fd2730f0" }
+pallas-codec = { git = "https://github.com/txpipe/pallas.git", rev = "3e87e6c704a6c3fac7ef02a633465592fd2730f0" }
+pallas-crypto = { git = "https://github.com/txpipe/pallas.git", rev = "3e87e6c704a6c3fac7ef02a633465592fd2730f0" }
+pallas-hardano = { git = "https://github.com/txpipe/pallas.git", rev = "3e87e6c704a6c3fac7ef02a633465592fd2730f0" }
+pallas-network = { git = "https://github.com/txpipe/pallas.git", rev = "3e87e6c704a6c3fac7ef02a633465592fd2730f0" }
+pallas-primitives = { git = "https://github.com/txpipe/pallas.git", rev = "3e87e6c704a6c3fac7ef02a633465592fd2730f0" }
+pallas-traverse = { git = "https://github.com/txpipe/pallas.git", rev = "3e87e6c704a6c3fac7ef02a633465592fd2730f0" }
 pretty_assertions = "1.4.1"
 proptest = "1.10.0"
 reqwest = { version = "0.13.2", default-features = false, features = [

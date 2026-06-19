@@ -11,7 +11,7 @@ use tracing::{error, info, warn};
 use uuid::Uuid;
 
 const ACCESS_TOKEN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5 * 60);
-const MAX_BODY_BYTES: usize = 1024 * 1024;
+const MAX_BODY_BYTES: usize = bf_common::DEFAULT_MAX_BODY_BYTES;
 const REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
 const WS_PING_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
 

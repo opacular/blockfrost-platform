@@ -83,7 +83,13 @@ async fn main() -> Result<(), AppError> {
             .register_error_source(health_errors.clone())
             .await;
 
-        let manager = IcebreakersManager::new(icebreakers_api, health_errors, app, api_prefix);
+        let manager = IcebreakersManager::new(
+            icebreakers_api,
+            health_errors,
+            app,
+            api_prefix,
+            config.max_response_body_bytes,
+        );
 
         manager
             .run((kex_req_rx, kex_resp_tx, terminate_req_tx))
