@@ -19,11 +19,11 @@
     "blockfrost-tests": {
       "flake": false,
       "locked": {
-        "lastModified": 1780914694,
-        "narHash": "sha256-mvaEDuPUEHGadExEOJWToVnqR244joZHioZH/bWoe1A=",
+        "lastModified": 1781618927,
+        "narHash": "sha256-2FT9p9MmfKLuKUawKLKZyuWRAh0Xi4iA+sfc+ERjYrk=",
         "owner": "blockfrost",
         "repo": "blockfrost-tests",
-        "rev": "2a9b6471625eeec40bec57c6d31c96c8890a87a9",
+        "rev": "f2e2845d390d8d271463ea93357eef6bf0617b4e",
         "type": "github"
       },
       "original": {
