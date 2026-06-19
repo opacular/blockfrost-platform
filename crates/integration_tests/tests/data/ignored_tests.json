@@ -109,6 +109,10 @@
     {
       "_comment": "accounts/stake_test1uzkdwx64sjkt6xxtzye00y3k2m9wn5zultsguadaf4ggmssadyunp/addresses",
       "id": "accounts-stake-address-generic-stake-address-with-zero-addresses_4261465085d4"
+    },
+    {
+      "_comment": "epochs/latest/parameters -- Dolos v1.2.0 on Preprod returns an older protocol version (v10) with a reduced cost-model set, while the real Blockfrost API returns the current params (v11). Known Dolos limitation on Preprod.",
+      "id": "epochs-latest-parameters-latest-epoch_a73a0c95ff80"
     }
   ],
   "preview": [
