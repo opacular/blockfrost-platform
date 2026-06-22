@@ -4,7 +4,7 @@ use axum::{Json, extract::State};
 use bf_api_provider::types::GenesisResponse;
 
 pub async fn route(State(state): State<AppState>) -> ApiResult<GenesisResponse> {
-    let genesis = state.genesis.by_network(&state.config.network);
+    let genesis = state.config.genesis.by_network(&state.config.network);
 
     Ok(Json(genesis.clone()))
 }
@@ -48,14 +48,13 @@ mod tests {
             no_metrics: false,
             network,
             custom_genesis_config: None,
-            genesis: registry.clone(),
+            genesis: registry,
             data_node: None,
             hydra: None,
         };
 
         AppState {
             config: Arc::new(config),
-            genesis: Arc::new(registry),
             data_node: None,
         }
     }

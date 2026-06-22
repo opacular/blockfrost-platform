@@ -77,12 +77,9 @@ pub async fn build(
     // Nest under the UUID prefix
     let api_routes = nest_routes(&api_prefix, regular_api_routes, hidden_api_routes);
 
-    let genesis = Arc::new(config.genesis.clone());
-
     // Initialize the app state
     let app_state = AppState {
         config: config.clone(),
-        genesis,
         data_node,
     };
 
