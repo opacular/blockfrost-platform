@@ -160,7 +160,8 @@ in {
     startup.install-git-hooks.text = ''
       # Point git at our version-controlled hooks (currently: pre-commit fmt check).
       if [[ -e "$PRJ_ROOT/.git" ]] ; then
-        git -C "$PRJ_ROOT" config core.hooksPath .githooks
+        # Don't abort devshell startup if .git is read-only
+        git -C "$PRJ_ROOT" config core.hooksPath .githooks || true
       fi
     '';
   };
