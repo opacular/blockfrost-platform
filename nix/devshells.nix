@@ -156,5 +156,12 @@ in {
 
       ln -sfn ${internal.generated-dir} "$PRJ_ROOT/generated"
     '';
+
+    startup.install-git-hooks.text = ''
+      # Point git at our version-controlled hooks (currently: pre-commit fmt check).
+      if [[ -e "$PRJ_ROOT/.git" ]] ; then
+        git -C "$PRJ_ROOT" config core.hooksPath .githooks
+      fi
+    '';
   };
 }

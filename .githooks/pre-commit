@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# Pre-commit hook: ensure Rust code is formatted.
+# Mirrors the `static_checks` job in .github/workflows/ci.yaml so that
+# formatting failures are caught locally instead of in CI.
+set -euo pipefail
+
+if ! command -v cargo >/dev/null 2>&1; then
+  echo "pre-commit: 'cargo' not found in PATH — skipping fmt check." >&2
+  echo "            (enter the nix devshell / 'direnv allow' to get the toolchain)" >&2
+  exit 0
+fi
+
+if ! cargo fmt --all -- --check; then
+  echo >&2
+  echo "✖ pre-commit: Rust formatting check failed." >&2
+  echo "  Run 'cargo fmt --all', re-stage your changes, and commit again." >&2
+  exit 1
+fi
