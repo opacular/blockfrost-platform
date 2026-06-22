@@ -52,4 +52,10 @@ impl DataNodeAddresses<'_> {
 
         self.inner.client.get(&path, Some(pagination)).await
     }
+
+    pub async fn txs(&self, address: &str, pagination: &Pagination) -> ApiResult<Vec<String>> {
+        let path = format!("addresses/{address}/txs");
+
+        self.inner.client.get(&path, Some(pagination)).await
+    }
 }
