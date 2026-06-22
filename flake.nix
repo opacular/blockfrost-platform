@@ -20,7 +20,7 @@
       flake = false; # otherwise, +2k dependencies we don’t really use
     };
     dolos = {
-      url = "github:txpipe/dolos/v1.2.0";
+      url = "github:txpipe/dolos/v1.3.1";
       flake = false;
     };
     blockfrost-tests = {
