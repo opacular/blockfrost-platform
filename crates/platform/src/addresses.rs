@@ -83,7 +83,7 @@ pub fn is_stake_address_valid(input: &str, network: &Network) -> Result<bool, Bl
         Network::Mainnet if prefix_str == "stake" => Ok(true),
         Network::Preprod | Network::Preview | Network::Custom if prefix_str == "stake_test" => {
             Ok(true)
-        }
+        },
         _ => Ok(false),
     }
 }
