@@ -184,14 +184,21 @@ in {
         # Only manage `core.hooksPath` when it's unset or still points at a
         # (possibly older) version of our own hooks; never clobber a
         # contributor's own setup or hooks installed by other tooling.
+        installed=
         current="$(git -C "$PRJ_ROOT" config --get core.hooksPath 2>/dev/null || true)"
         if [[ -z "$current" || "$current" == /nix/store/*-blockfrost-platform-git-hooks ]] ; then
-          # Don't abort devshell startup if .git is read-only
-          git -C "$PRJ_ROOT" config --local core.hooksPath ${gitHooks} || true
+          if git -C "$PRJ_ROOT" config --local core.hooksPath ${gitHooks} ; then
+            installed=1
+          else
+            echo >&2 "note: couldn't set git core.hooksPath (is .git read-only?)"
+          fi
         else
           echo >&2 "note: leaving your existing git core.hooksPath ($current) untouched"
+        fi
+        if [[ -z "$installed" ]] ; then
           echo >&2 "hint: the blockfrost-platform pre-commit (treefmt) hook was not installed"
         fi
+        unset installed current
       fi
     '';
   };
