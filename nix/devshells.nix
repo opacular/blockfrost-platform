@@ -156,5 +156,43 @@ in {
 
       ln -sfn ${internal.generated-dir} "$PRJ_ROOT/generated"
     '';
+
+    startup.install-git-hooks.text = let
+      gitHooks = pkgs.runCommand "blockfrost-platform-git-hooks" {} ''
+        mkdir -p "$out"
+        ln -s ${
+          pkgs.writeShellScript "pre-commit" ''
+            set -euo pipefail
+
+            if [ -n "''${SKIP_TREEFMT+x}" ]; then
+              exit 0
+            fi
+
+            if "${lib.getExe inputs.self.formatter.${pkgs.stdenv.hostPlatform.system}}" --fail-on-change; then
+              exit 0
+            else
+              status=$?
+              echo >&2 'error: treefmt detected (and corrected) unformatted code'
+              echo >&2 'hint: set SKIP_TREEFMT=1 to skip treefmt in pre-commit'
+              exit "$status"
+            fi
+          ''
+        } "$out/pre-commit"
+      '';
+    in ''
+      if [[ -e "$PRJ_ROOT/.git" ]] ; then
+        # Only manage `core.hooksPath` when it's unset or still points at a
+        # (possibly older) version of our own hooks; never clobber a
+        # contributor's own setup or hooks installed by other tooling.
+        current="$(git -C "$PRJ_ROOT" config --get core.hooksPath 2>/dev/null || true)"
+        if [[ -z "$current" || "$current" == /nix/store/*-blockfrost-platform-git-hooks ]] ; then
+          # Don't abort devshell startup if .git is read-only
+          git -C "$PRJ_ROOT" config --local core.hooksPath ${gitHooks} || true
+        else
+          echo >&2 "note: leaving your existing git core.hooksPath ($current) untouched"
+          echo >&2 "hint: the blockfrost-platform pre-commit (treefmt) hook was not installed"
+        fi
+      fi
+    '';
   };
 }
