@@ -186,7 +186,9 @@ in {
         # contributor's own setup or hooks installed by other tooling.
         installed=
         current="$(git -C "$PRJ_ROOT" config --get core.hooksPath 2>/dev/null || true)"
-        if [[ -z "$current" || "$current" == /nix/store/*-blockfrost-platform-git-hooks ]] ; then
+        if [[ "$current" == "${gitHooks}" ]] ; then
+          installed=1
+        elif [[ -z "$current" || "$current" == /nix/store/*-blockfrost-platform-git-hooks ]] ; then
           if git -C "$PRJ_ROOT" config --local core.hooksPath ${gitHooks} ; then
             installed=1
           else
