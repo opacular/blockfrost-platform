@@ -212,6 +212,24 @@ fn validate_genesis(genesis: &GenesisResponse) -> Result<(), String> {
         }
     }
 
+    let asc = genesis.active_slots_coefficient;
+
+    if !(asc > 0.0 && asc <= 1.0) {
+        return Err(format!(
+            "`active_slots_coefficient` must be in (0, 1], got {asc}"
+        ));
+    }
+
+    match genesis.max_lovelace_supply.parse::<u64>() {
+        Ok(n) if n > 0 => {},
+        _ => {
+            return Err(format!(
+                "`max_lovelace_supply` must be a positive integer, got `{}`",
+                genesis.max_lovelace_supply
+            ));
+        },
+    }
+
     Ok(())
 }
 
@@ -435,5 +453,55 @@ mod tests {
         assert!(msg.contains("network_magic"), "got: {msg}");
 
         let _ = fs::remove_file(&path);
+    }
+
+    #[tokio::test]
+    async fn custom_genesis_rejects_out_of_range_active_slots_coefficient() {
+        for (name, bad_value) in [("zero", "0.0"), ("above_one", "1.5")] {
+            let bad = CUSTOM_GENESIS_JSON.replace(
+                "\"active_slots_coefficient\": 0.1",
+                &format!("\"active_slots_coefficient\": {bad_value}"),
+            );
+            let path = write_temp(&format!("genesis_bad_asc_{name}.json"), &bad);
+            let args = args_with("/path/to/socket", Some(&path));
+
+            let err = Config::from_args_with_detector(
+                args,
+                recording_detector(Arc::new(AtomicBool::new(false))),
+            )
+            .await
+            .expect_err("out-of-range active_slots_coefficient must error");
+
+            let msg = format!("{err:?}");
+            assert!(msg.contains("Invalid custom genesis file"), "got: {msg}");
+            assert!(msg.contains("active_slots_coefficient"), "got: {msg}");
+
+            let _ = fs::remove_file(&path);
+        }
+    }
+
+    #[tokio::test]
+    async fn custom_genesis_rejects_non_positive_max_lovelace_supply() {
+        for (name, bad_value) in [("zero", "0"), ("garbage", "not-a-number")] {
+            let bad = CUSTOM_GENESIS_JSON.replace(
+                "\"max_lovelace_supply\": \"123456789\"",
+                &format!("\"max_lovelace_supply\": \"{bad_value}\""),
+            );
+            let path = write_temp(&format!("genesis_bad_supply_{name}.json"), &bad);
+            let args = args_with("/path/to/socket", Some(&path));
+
+            let err = Config::from_args_with_detector(
+                args,
+                recording_detector(Arc::new(AtomicBool::new(false))),
+            )
+            .await
+            .expect_err("non-positive max_lovelace_supply must error");
+
+            let msg = format!("{err:?}");
+            assert!(msg.contains("Invalid custom genesis file"), "got: {msg}");
+            assert!(msg.contains("max_lovelace_supply"), "got: {msg}");
+
+            let _ = fs::remove_file(&path);
+        }
     }
 }
