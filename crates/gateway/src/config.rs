@@ -40,10 +40,6 @@ pub struct ServerInput {
 pub struct DbInput {
     pub connection_string: Option<String>,
     pub connection_string_file: Option<String>,
-    /// Maximum number of connections this gateway keeps in its PostgreSQL pool.
-    /// The sum across all gateway instances must stay below the database's
-    /// connection limit (minus any slots reserved for superusers). Must be
-    /// non-zero; a `pool_max_size = 0` is rejected at config-load time.
     pub pool_max_size: NonZeroUsize,
 }
 
