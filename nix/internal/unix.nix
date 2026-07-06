@@ -778,6 +778,7 @@ in
 
             [database]
             connection_string = 'postgresql://unused:unused@127.0.0.1:5432/unused'
+            pool_max_size = 6
 
             [blockfrost]
             project_id = '${network}00000000000000000000000000000000'

@@ -5,6 +5,7 @@
 - Support for optional `X-SKIP-PORT-CHECK` header. When set to the value of the `SKIP_PORT_CHECK_SECRET` environment variable, the server skips the TCP port reachability check and accepts the provided port as-is.
 - Use a WebSocket load balancer to allow connections from behind NAT(s)
 - `project_id` and `connection_string` can also be fetched from a file
+- Required `database.pool_max_size` config value (overridable via `BLOCKFROST_GATEWAY_DB_POOL_MAX_SIZE`) that caps the PostgreSQL connection pool per gateway instance
 
 ## [1.3.3] - 2025-03-12
 

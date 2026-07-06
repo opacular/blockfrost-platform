@@ -7,6 +7,7 @@ use deadpool_diesel::postgres::{Manager, Pool};
 use diesel::prelude::*;
 use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
 use schema::users::dsl::*;
+use std::num::NonZeroUsize;
 
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations/");
 
@@ -16,9 +17,10 @@ pub struct DB {
 }
 
 impl DB {
-    pub async fn new(database_url: &str) -> Self {
+    pub async fn new(database_url: &str, pool_max_size: NonZeroUsize) -> Self {
         let manager = Manager::new(database_url, deadpool_diesel::Runtime::Tokio1);
         let pool = Pool::builder(manager)
+            .max_size(pool_max_size.get())
             .build()
             .expect("Failed to create pool.");
 
