@@ -33,7 +33,11 @@ async fn main() -> Result<()> {
 
     setup_tracing(config.server.log_level, "BLOCKFROST_GATEWAY_LOG_TARGET");
 
-    let pool = DB::new(&config.database.connection_string).await;
+    let pool = DB::new(
+        &config.database.connection_string,
+        config.database.pool_max_size,
+    )
+    .await;
     let blockfrost_api = blockfrost::BlockfrostAPI::new(&config.blockfrost.project_id);
     let hydras_manager = if let Some(hydra_platform_config) = &config.hydra_platform {
         Some(

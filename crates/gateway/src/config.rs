@@ -39,6 +39,7 @@ pub struct ServerInput {
 pub struct DbInput {
     pub connection_string: Option<String>,
     pub connection_string_file: Option<String>,
+    pub pool_max_size: usize,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -73,6 +74,7 @@ pub struct Server {
 #[derive(Debug, Deserialize, Clone)]
 pub struct Db {
     pub connection_string: String,
+    pub pool_max_size: usize,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -168,7 +170,10 @@ pub fn load_config(path: PathBuf) -> Config {
             peer_urls,
             peer_secret,
         },
-        database: Db { connection_string },
+        database: Db {
+            connection_string,
+            pool_max_size: toml_config.database.pool_max_size,
+        },
         blockfrost: Blockfrost {
             project_id,
             nft_asset: toml_config.blockfrost.nft_asset,
@@ -253,6 +258,12 @@ fn override_with_env(config: Config) -> Config {
         .unwrap_or_else(|_| config.server.log_level.to_string());
     let db_connection =
         var("BLOCKFROST_GATEWAY_DB_CONNECTION_STRING").unwrap_or(config.database.connection_string);
+    let pool_max_size = var("BLOCKFROST_GATEWAY_DB_POOL_MAX_SIZE")
+        .map(|s| {
+            s.parse::<usize>()
+                .expect("BLOCKFROST_GATEWAY_DB_POOL_MAX_SIZE must be a positive integer")
+        })
+        .unwrap_or(config.database.pool_max_size);
     let project_id = var("BLOCKFROST_GATEWAY_PROJECT_ID").unwrap_or(config.blockfrost.project_id);
     let nft_asset = var("BLOCKFROST_GATEWAY_NFT_ASSET").unwrap_or(config.blockfrost.nft_asset);
     let network = network_from_project_id(&project_id).expect("invalid Blockfrost project_id");
@@ -277,6 +288,7 @@ fn override_with_env(config: Config) -> Config {
         },
         database: Db {
             connection_string: db_connection,
+            pool_max_size,
         },
         blockfrost: Blockfrost {
             project_id,

@@ -16,9 +16,10 @@ pub struct DB {
 }
 
 impl DB {
-    pub async fn new(database_url: &str) -> Self {
+    pub async fn new(database_url: &str, pool_max_size: usize) -> Self {
         let manager = Manager::new(database_url, deadpool_diesel::Runtime::Tokio1);
         let pool = Pool::builder(manager)
+            .max_size(pool_max_size)
             .build()
             .expect("Failed to create pool.");
 
