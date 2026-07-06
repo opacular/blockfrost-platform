@@ -4,6 +4,7 @@ use clap::Parser;
 use serde::{Deserialize, Deserializer};
 use std::env::var;
 use std::fs::read_to_string;
+use std::num::NonZeroUsize;
 use std::str::FromStr;
 use std::{fs, path::PathBuf};
 use tracing::Level;
@@ -39,7 +40,11 @@ pub struct ServerInput {
 pub struct DbInput {
     pub connection_string: Option<String>,
     pub connection_string_file: Option<String>,
-    pub pool_max_size: usize,
+    /// Maximum number of connections this gateway keeps in its PostgreSQL pool.
+    /// The sum across all gateway instances must stay below the database's
+    /// connection limit (minus any slots reserved for superusers). Must be
+    /// non-zero; a `pool_max_size = 0` is rejected at config-load time.
+    pub pool_max_size: NonZeroUsize,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -74,7 +79,7 @@ pub struct Server {
 #[derive(Debug, Deserialize, Clone)]
 pub struct Db {
     pub connection_string: String,
-    pub pool_max_size: usize,
+    pub pool_max_size: NonZeroUsize,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -260,8 +265,8 @@ fn override_with_env(config: Config) -> Config {
         var("BLOCKFROST_GATEWAY_DB_CONNECTION_STRING").unwrap_or(config.database.connection_string);
     let pool_max_size = var("BLOCKFROST_GATEWAY_DB_POOL_MAX_SIZE")
         .map(|s| {
-            s.parse::<usize>()
-                .expect("BLOCKFROST_GATEWAY_DB_POOL_MAX_SIZE must be a positive integer")
+            s.parse::<NonZeroUsize>()
+                .expect("BLOCKFROST_GATEWAY_DB_POOL_MAX_SIZE must be an integer greater than 0")
         })
         .unwrap_or(config.database.pool_max_size);
     let project_id = var("BLOCKFROST_GATEWAY_PROJECT_ID").unwrap_or(config.blockfrost.project_id);
@@ -328,5 +333,29 @@ mod tests {
         std::fs::remove_file(&path).ok();
 
         read_secret_file(&path.to_string_lossy(), "test secret");
+    }
+
+    #[test]
+    fn pool_max_size_rejects_zero() {
+        let toml = r#"
+            connection_string = 'postgresql://user:pass@host:port/db'
+            pool_max_size = 0
+        "#;
+        let err = toml::from_str::<DbInput>(toml)
+            .expect_err("pool_max_size = 0 must be rejected at config-load time");
+        assert!(
+            err.to_string().contains("pool_max_size"),
+            "error should mention the offending field, got: {err}"
+        );
+    }
+
+    #[test]
+    fn pool_max_size_accepts_positive() {
+        let toml = r#"
+            connection_string = 'postgresql://user:pass@host:port/db'
+            pool_max_size = 6
+        "#;
+        let db: DbInput = toml::from_str(toml).expect("valid pool_max_size must parse");
+        assert_eq!(db.pool_max_size.get(), 6);
     }
 }
