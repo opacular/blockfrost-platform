@@ -2,10 +2,17 @@
 
 ### Added
 
+- Prometheus metrics endpoint `GET /metrics` exposing per-relay stats (connection status, WebSocket RTT, connected-since timestamp, request/response counters) and PostgreSQL connection-pool gauges (max size, open, available, waiting)
+- Prometheus counter `blockfrost_gateway_http_requests_total` with `method`, `route`, and `status_code` labels for Gateway API requests
+- `blockfrost_gateway_build_info` metric exposing the Gateway version and git revision
 - Support for optional `X-SKIP-PORT-CHECK` header. When set to the value of the `SKIP_PORT_CHECK_SECRET` environment variable, the server skips the TCP port reachability check and accepts the provided port as-is.
 - Use a WebSocket load balancer to allow connections from behind NAT(s)
 - `project_id` and `connection_string` can also be fetched from a file
 - Required `database.pool_max_size` config value (overridable via `BLOCKFROST_GATEWAY_DB_POOL_MAX_SIZE`) that caps the PostgreSQL connection pool per gateway instance
+
+### Fixed
+
+- The underlying Blockfrost API error (e.g. rate limiting) is now logged when the license NFT check fails during registration
 
 ## [1.3.3] - 2025-03-12
 

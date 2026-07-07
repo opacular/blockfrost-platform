@@ -16,6 +16,14 @@ pub struct DB {
     pool: Pool,
 }
 
+/// A point-in-time snapshot of the connection pool state, for metrics.
+pub struct PoolStatus {
+    pub max_size: usize,
+    pub size: usize,
+    pub available: usize,
+    pub waiting: usize,
+}
+
 impl DB {
     pub async fn new(database_url: &str, pool_max_size: NonZeroUsize) -> Self {
         let manager = Manager::new(database_url, deadpool_diesel::Runtime::Tokio1);
@@ -36,6 +44,16 @@ impl DB {
             .expect("Migration execution error.");
 
         Self { pool }
+    }
+
+    pub fn pool_status(&self) -> PoolStatus {
+        let status = self.pool.status();
+        PoolStatus {
+            max_size: status.max_size,
+            size: status.size,
+            available: status.available,
+            waiting: status.waiting,
+        }
     }
 
     pub async fn insert_request(&self, request: RequestNewItem) -> Result<Request, APIError> {

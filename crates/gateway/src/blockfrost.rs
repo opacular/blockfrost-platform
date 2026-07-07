@@ -1,6 +1,7 @@
 use crate::errors::APIError;
 use crate::types::AssetName;
 use blockfrost::{BlockFrostSettings, BlockfrostAPI as bf_sdk};
+use tracing::error;
 
 #[derive(Clone)]
 pub struct BlockfrostAPI {
@@ -47,11 +48,10 @@ impl BlockfrostAPI {
             });
         }
 
-        let bf_result = self
-            .api
-            .addresses(address)
-            .await
-            .map_err(|err| APIError::License(err.to_string()))?;
+        let bf_result = self.api.addresses(address).await.map_err(|err| {
+            error!("Blockfrost API error while checking the license of {address}: {err}");
+            APIError::License(err.to_string())
+        })?;
 
         let found_asset = bf_result
             .amount
