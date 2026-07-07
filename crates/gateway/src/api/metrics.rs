@@ -1,6 +1,7 @@
 use crate::db::{DB, PoolStatus};
 use crate::load_balancer::LoadBalancerState;
 use axum::{Extension, http::StatusCode, response::IntoResponse};
+use metrics_exporter_prometheus::formatting::sanitize_label_value;
 use std::fmt::Write as _;
 use std::sync::atomic;
 use tracing::error;
@@ -16,16 +17,10 @@ struct RelayMetrics {
     requests_in_progress: u64,
 }
 
-fn escape_label_value(s: &str) -> String {
-    s.replace('\\', "\\\\")
-        .replace('"', "\\\"")
-        .replace('\n', "\\n")
-}
-
 fn relay_labels(r: &RelayMetrics) -> String {
     format!(
         "{{relay=\"{}\",api_prefix=\"{}\"}}",
-        escape_label_value(&r.relay),
+        sanitize_label_value(&r.relay),
         r.api_prefix
     )
 }
