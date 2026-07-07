@@ -1,3 +1,4 @@
+use crate::db::{DB, PoolStatus};
 use crate::load_balancer::LoadBalancerState;
 use axum::{Extension, http::StatusCode, response::IntoResponse};
 use std::fmt::Write as _;
@@ -77,6 +78,7 @@ const RELAY_METRICS: &[RelayMetric] = &[
 
 pub(crate) async fn render_prometheus(
     load_balancer: &LoadBalancerState,
+    db_pool: &PoolStatus,
 ) -> Result<String, std::fmt::Error> {
     let now_chrono = chrono::Utc::now();
     let now_instant = std::time::Instant::now();
@@ -118,6 +120,33 @@ pub(crate) async fn render_prometheus(
     writeln!(out, "# TYPE blockfrost_gateway_connected_relays gauge")?;
     writeln!(out, "blockfrost_gateway_connected_relays {}", relays.len())?;
 
+    for (name, help, value) in [
+        (
+            "blockfrost_gateway_db_pool_max_size",
+            "Maximum number of PostgreSQL connections in the pool.",
+            db_pool.max_size,
+        ),
+        (
+            "blockfrost_gateway_db_pool_size",
+            "Current number of open PostgreSQL connections in the pool.",
+            db_pool.size,
+        ),
+        (
+            "blockfrost_gateway_db_pool_available",
+            "Idle PostgreSQL connections available for immediate use.",
+            db_pool.available,
+        ),
+        (
+            "blockfrost_gateway_db_pool_waiting",
+            "Tasks currently waiting for a PostgreSQL connection.",
+            db_pool.waiting,
+        ),
+    ] {
+        writeln!(out, "# HELP {name} {help}")?;
+        writeln!(out, "# TYPE {name} gauge")?;
+        writeln!(out, "{name} {value}")?;
+    }
+
     for &(name, kind, help, value) in RELAY_METRICS {
         writeln!(out, "# HELP {name} {help}")?;
         writeln!(out, "# TYPE {name} {kind}")?;
@@ -133,11 +162,14 @@ pub(crate) async fn render_prometheus(
 
 pub async fn route(
     Extension(load_balancer): Extension<LoadBalancerState>,
+    Extension(db): Extension<DB>,
 ) -> Result<impl IntoResponse, StatusCode> {
-    let body = render_prometheus(&load_balancer).await.map_err(|e| {
-        error!("failed to render gateway metrics: {e}");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let body = render_prometheus(&load_balancer, &db.pool_status())
+        .await
+        .map_err(|e| {
+            error!("failed to render gateway metrics: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
     Ok((
         [(
             axum::http::header::CONTENT_TYPE,
@@ -158,6 +190,15 @@ mod tests {
 
     fn test_key() -> [u8; 32] {
         *blake3::hash(b"test-peer-secret").as_bytes()
+    }
+
+    fn test_pool_status() -> PoolStatus {
+        PoolStatus {
+            max_size: 8,
+            size: 3,
+            available: 2,
+            waiting: 1,
+        }
     }
 
     fn test_relay_state(name: &str) -> RelayState {
@@ -185,10 +226,17 @@ mod tests {
         relay.responses_received.store(4, atomic::Ordering::SeqCst);
         lb.active_relays.lock().await.insert(uuid, relay);
 
-        let out = render_prometheus(&lb).await.expect("render metrics");
+        let out = render_prometheus(&lb, &test_pool_status())
+            .await
+            .expect("render metrics");
 
         assert!(out.contains("# TYPE blockfrost_gateway_connected_relays gauge"));
         assert!(out.contains("\nblockfrost_gateway_connected_relays 1\n"));
+        assert!(out.contains("# TYPE blockfrost_gateway_db_pool_max_size gauge"));
+        assert!(out.contains("\nblockfrost_gateway_db_pool_max_size 8\n"));
+        assert!(out.contains("\nblockfrost_gateway_db_pool_size 3\n"));
+        assert!(out.contains("\nblockfrost_gateway_db_pool_available 2\n"));
+        assert!(out.contains("\nblockfrost_gateway_db_pool_waiting 1\n"));
         assert!(out.contains("# TYPE blockfrost_gateway_relay_requests_sent_total counter"));
         assert!(out.contains(
             "blockfrost_gateway_relay_requests_sent_total{relay=\"Icebreaker2\",api_prefix=\"513d26a9-9fea-4fbd-8ff4-d9ab00875c59\"} 5"
@@ -207,7 +255,9 @@ mod tests {
     #[tokio::test]
     async fn reports_zero_when_no_relays() {
         let lb = LoadBalancerState::new(None, test_key());
-        let out = render_prometheus(&lb).await.expect("render metrics");
+        let out = render_prometheus(&lb, &test_pool_status())
+            .await
+            .expect("render metrics");
         assert!(out.contains("\nblockfrost_gateway_connected_relays 0\n"));
     }
 
@@ -220,7 +270,9 @@ mod tests {
             .await
             .insert(uuid, test_relay_state("we\"ird\\name"));
 
-        let out = render_prometheus(&lb).await.expect("render metrics");
+        let out = render_prometheus(&lb, &test_pool_status())
+            .await
+            .expect("render metrics");
         assert!(out.contains("relay=\"we\\\"ird\\\\name\""));
     }
 }
