@@ -1,11 +1,44 @@
 use crate::db::{DB, PoolStatus};
 use crate::load_balancer::LoadBalancerState;
 use axum::{Extension, http::StatusCode, response::IntoResponse};
+use metrics::{describe_counter, describe_gauge, gauge};
 use metrics_exporter_prometheus::formatting::sanitize_label_value;
+use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
 use std::fmt::Write as _;
+use std::sync::OnceLock;
 use std::sync::atomic;
 use tracing::error;
 use uuid::Uuid;
+
+static HANDLE: OnceLock<PrometheusHandle> = OnceLock::new();
+
+pub fn setup_metrics_recorder() -> PrometheusHandle {
+    HANDLE
+        .get_or_init(|| {
+            let handle = PrometheusBuilder::new()
+                .install_recorder()
+                .expect("failed to install Prometheus recorder");
+
+            describe_counter!(
+                "blockfrost_gateway_http_requests_total",
+                "HTTP requests handled by the Gateway API, by method, route template, and status code."
+            );
+
+            describe_gauge!(
+                "blockfrost_gateway_build_info",
+                "Version and git revision of the running Gateway (always 1)."
+            );
+            gauge!(
+                "blockfrost_gateway_build_info",
+                "version" => env!("CARGO_PKG_VERSION"),
+                "revision" => env!("GIT_REVISION"),
+            )
+            .set(1);
+
+            handle
+        })
+        .clone()
+}
 
 struct RelayMetrics {
     relay: String,
@@ -158,13 +191,17 @@ pub(crate) async fn render_prometheus(
 pub async fn route(
     Extension(load_balancer): Extension<LoadBalancerState>,
     Extension(db): Extension<DB>,
+    Extension(prometheus_handle): Extension<PrometheusHandle>,
 ) -> Result<impl IntoResponse, StatusCode> {
-    let body = render_prometheus(&load_balancer, &db.pool_status())
-        .await
-        .map_err(|e| {
-            error!("failed to render gateway metrics: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let mut body = prometheus_handle.render();
+    body.push_str(
+        &render_prometheus(&load_balancer, &db.pool_status())
+            .await
+            .map_err(|e| {
+                error!("failed to render gateway metrics: {e}");
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?,
+    );
     Ok((
         [(
             axum::http::header::CONTENT_TYPE,
@@ -245,6 +282,14 @@ mod tests {
         assert!(
             !out.contains("blockfrost_gateway_relay_network_rtt_seconds{relay=\"Icebreaker2\"")
         );
+    }
+
+    #[test]
+    fn recorder_renders_build_info() {
+        let out = setup_metrics_recorder().render();
+        assert!(out.contains("# TYPE blockfrost_gateway_build_info gauge"));
+        assert!(out.contains(&format!("version=\"{}\"", env!("CARGO_PKG_VERSION"))));
+        assert!(out.contains(&format!("revision=\"{}\"", env!("GIT_REVISION"))));
     }
 
     #[tokio::test]

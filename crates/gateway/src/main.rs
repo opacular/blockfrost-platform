@@ -2,12 +2,13 @@ use anyhow::Result;
 use api::{register, root};
 use axum::{
     Extension, Router,
+    middleware::from_fn,
     routing::{get, post},
 };
 use bf_common::tracing::setup_tracing;
 use blockfrost_gateway::{
     api, blockfrost, config, db, hydra_server_bridge, hydra_server_platform, load_balancer,
-    rate_limit, sdk_bridge_ws,
+    middlewares, rate_limit, sdk_bridge_ws,
 };
 use clap::Parser;
 use colored::Colorize;
@@ -32,6 +33,8 @@ async fn main() -> Result<()> {
     let config: Config = config::load_config(arguments.config);
 
     setup_tracing(config.server.log_level, "BLOCKFROST_GATEWAY_LOG_TARGET");
+
+    let prometheus_handle = api::metrics::setup_metrics_recorder();
 
     let pool = DB::new(
         &config.database.connection_string,
@@ -101,12 +104,14 @@ async fn main() -> Result<()> {
         .layer(Extension(config.clone()))
         .layer(Extension(pool))
         .layer(Extension(blockfrost_api))
-        .layer(Extension(register_rate_limiter));
+        .layer(Extension(register_rate_limiter))
+        .layer(Extension(prometheus_handle));
 
     let sdk_state = sdk_bridge_ws::SdkBridgeState::new(base_router.clone(), hydras_bridge_manager);
 
     let app = base_router
         .route("/sdk/ws", get(sdk_bridge_ws::websocket_route))
+        .route_layer(from_fn(middlewares::metrics::track_http_metrics))
         .layer(Extension(sdk_state));
 
     let listener = tokio::net::TcpListener::bind(&config.server.address)
