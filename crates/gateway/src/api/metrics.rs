@@ -81,8 +81,16 @@ pub(crate) async fn render_prometheus(
     let now_chrono = chrono::Utc::now();
     let now_instant = std::time::Instant::now();
 
-    let mut relays: Vec<RelayMetrics> = Vec::new();
-    for (api_prefix, relay_state) in load_balancer.active_relays.lock().await.iter() {
+    let snapshot: Vec<(Uuid, crate::load_balancer::RelayState)> = load_balancer
+        .active_relays
+        .lock()
+        .await
+        .iter()
+        .map(|(api_prefix, relay_state)| (*api_prefix, relay_state.clone()))
+        .collect();
+
+    let mut relays: Vec<RelayMetrics> = Vec::with_capacity(snapshot.len());
+    for (api_prefix, relay_state) in &snapshot {
         relays.push(RelayMetrics {
             relay: relay_state.name.0.clone(),
             api_prefix: *api_prefix,
