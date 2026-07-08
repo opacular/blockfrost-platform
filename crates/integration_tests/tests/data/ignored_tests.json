@@ -81,14 +81,6 @@
       "id": "addresses-address-transactions-generic-payment-cred-3-page-with-self-tx_7649bcb6fa85"
     },
     {
-      "_comment": "pools/extended?count=5&page=3, pools/extended?count=5&page=3&order=asc",
-      "id": "pools-extended-queryparams_33c8fc92f5c2"
-    },
-    {
-      "_comment": "txs/f1aee024a482d5d21ed552d15eefbb664e98095cdabde75a9ff9c78c0812e6fb/pool_updates",
-      "id": "txs-tx-generic-shelley-with-multiple-delegation-stake-certs-and-pool-updates_474556906a6a"
-    },
-    {
       "_comment": "addresses/addr_vkh15ew2tzjwn364l2pszu7j5h9w63v2crrnl97m074w9elrk6zy2tc/txs?order=asc&page=42000 -- Dolos HTTP 400 (scan limit: page*count=4200000 > max_scan_items=3000); real Blockfrost returns the full array",
       "id": "addresses-address-txs-generic-payment-cred-1_ada2582fd6c1"
     },
