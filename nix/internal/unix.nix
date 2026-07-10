@@ -17,10 +17,11 @@ assert builtins.elem targetSystem ["x86_64-linux" "aarch64-linux" "aarch64-darwi
     ) {inherit inputs targetSystem unix;};
 in
   extendForTarget rec {
-    rustPackages = inputs.fenix.packages.${pkgs.stdenv.hostPlatform.system}.toolchainOf {
+    rustChannel = {
       channel = "1.97.0";
       sha256 = "sha256-OATSZm98Es5kIFuqaba+UvkQtFsVgJEBMmS+t6od5/U=";
     };
+    rustPackages = inputs.fenix.packages.${pkgs.stdenv.hostPlatform.system}.toolchainOf rustChannel;
     craneLib = (inputs.crane.mkLib pkgs).overrideToolchain rustPackages.toolchain;
 
     src = lib.cleanSourceWith {
@@ -1034,10 +1035,7 @@ in
       fenix = inputs.fenix.packages.${pkgs.stdenv.hostPlatform.system};
 
       wasmStd =
-        (fenix.targets.wasm32-unknown-unknown.toolchainOf {
-          channel = "1.97.0";
-          sha256 = "sha256-OATSZm98Es5kIFuqaba+UvkQtFsVgJEBMmS+t6od5/U=";
-        }).rust-std;
+        (fenix.targets.wasm32-unknown-unknown.toolchainOf rustChannel).rust-std;
 
       # A toolchain with the wasm32 target available:
       rustToolchain = fenix.combine [
