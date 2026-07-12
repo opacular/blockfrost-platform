@@ -18,7 +18,7 @@
     },
     {
       "_comment": "blocks/1",
-      "id": "blocks-hash-or-number-first-blocks-1-4_8cfce818362a"
+      "id": "blocks-hash-or-number-first-blocks-1-4_dd538cb74806"
     },
     {
       "_comment": "blocks/471ee59bee5cadc22ec85c4519acd4ee6f843eb30b34793db6ba1a9eb0426afb/next?count=2",
@@ -82,7 +82,7 @@
     },
     {
       "_comment": "pools/extended?count=5&page=3, pools/extended?count=5&page=3&order=asc",
-      "id": "pools-extended-queryparams_33c8fc92f5c2"
+      "id": "pools-extended-queryparams_f93f8df6a57c"
     },
     {
       "_comment": "txs/f1aee024a482d5d21ed552d15eefbb664e98095cdabde75a9ff9c78c0812e6fb/pool_updates",
@@ -210,7 +210,7 @@
     },
     {
       "_comment": "assets/ddd01d9531fcc25e3ca4b6429318c2cc374dbdbcf5e99c1c1e5da1ff444f4e545350414d/addresses -- Dolos returns an empty array [] for a valid asset that was never minted on-chain, while the real Blockfrost API returns HTTP 404 Not Found",
-      "id": "assets-addresses-valid-not-on-chain-asset_3ad55423382f"
+      "id": "assets-addresses-valid-not-on-chain-asset_d80161a519cc"
     },
     {
       "_comment": "epochs/123/blocks?count=2 -- Dolos omits the Byron epoch boundary block (EBB) from the block list, yielding different hashes than the real Blockfrost API",
