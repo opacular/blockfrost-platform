@@ -369,7 +369,15 @@ pub mod api {
         let now_chrono = chrono::Utc::now();
         let now_instant = std::time::Instant::now();
 
-        for (api_prefix, relay_state) in load_balancer.active_relays.lock().await.iter() {
+        let snapshot: Vec<(Uuid, RelayState)> = load_balancer
+            .active_relays
+            .lock()
+            .await
+            .iter()
+            .map(|(api_prefix, relay_state)| (*api_prefix, relay_state.clone()))
+            .collect();
+
+        for (api_prefix, relay_state) in &snapshot {
             let platform_health = relay_state.platform_health.lock().await.clone();
             rv.insert(
                 relay_state.name.clone(),
