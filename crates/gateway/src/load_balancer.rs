@@ -1250,10 +1250,11 @@ async fn check_platform_health_periodically(
     new_request_channel: mpsc::Sender<RequestState>,
     platform_health: Arc<Mutex<Option<PlatformHealth>>>,
 ) {
+    let mut interval = tokio::time::interval(HEALTH_CHECK_INTERVAL);
     loop {
+        interval.tick().await;
         let health = check_platform_health(&new_request_channel).await;
         *platform_health.lock().await = Some(health);
-        tokio::time::sleep(HEALTH_CHECK_INTERVAL).await;
     }
 }
 
