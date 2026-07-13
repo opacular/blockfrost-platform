@@ -81,10 +81,6 @@
       "id": "addresses-address-transactions-generic-payment-cred-3-page-with-self-tx_7649bcb6fa85"
     },
     {
-      "_comment": "pools/extended?count=5&page=3, pools/extended?count=5&page=3&order=asc",
-      "id": "pools-extended-queryparams_33c8fc92f5c2"
-    },
-    {
       "_comment": "txs/f1aee024a482d5d21ed552d15eefbb664e98095cdabde75a9ff9c78c0812e6fb/pool_updates",
       "id": "txs-tx-generic-shelley-with-multiple-delegation-stake-certs-and-pool-updates_474556906a6a"
     },
@@ -227,6 +223,10 @@
     {
       "_comment": "pools/pool1r8lmsrdure385hz647kl2qjhyyxkdle4au5krjcsqed4x8227k3/history?page=2 -- Dolos pool history differs from the real Blockfrost API (f64 active_size precision / missing epochs)",
       "id": "pools-pool-id-history-problematic-pool-history-dbsync-issue-missing-some-epochs_912a978ee4cf"
+    },
+    {
+      "_comment": "epochs/latest/parameters -- Dolos returns outdated PlutusV1/V2/V3 cost models compared to the real Blockfrost API after the latest mainnet protocol update (missing new builtins like andByteString/expModInteger/scaleValue and old values for equalsByteString and divide/mod/quotientInteger)",
+      "id": "epochs-latest-parameters_a73a0c95ff80"
     }
   ],
   "preprod": [
