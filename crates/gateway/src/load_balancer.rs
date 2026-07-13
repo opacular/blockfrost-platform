@@ -129,7 +129,7 @@ impl PlatformHealth {
 #[derive(Debug)]
 pub struct RequestState {
     respond_to: oneshot::Sender<JsonResponse>,
-    expires: std::time::Instant, // never read, do we need it?
+    expires: std::time::Instant,
     underlying: JsonRequest,
     is_health_check: bool,
 }
@@ -751,13 +751,18 @@ pub mod event_loop {
                 },
 
                 LBEvent::NewRelayMessage(RelayMessage::Response(response)) => {
+                    let code = response.code;
+                    let is_health_check =
+                        pass_on_response(response, &relay_state, asset_name).await;
+                    // Only bill known user requests to Hydra micropayments —
+                    // neither our own health checks, nor unknown (e.g. already
+                    // expired and cleaned-up) requests:
                     if let Some(ctl) = &hydra_controller
-                        && (200..500).contains(&response.code)
-                        && !is_health_check_response(&relay_state, &response.id).await
+                        && (200..500).contains(&code)
+                        && is_health_check == Some(false)
                     {
                         ctl.account_one_request().await;
                     }
-                    pass_on_response(response, &relay_state, asset_name).await;
                 },
 
                 LBEvent::NewRelayMessage(RelayMessage::Ping(ping_id)) => {
@@ -919,18 +924,6 @@ pub mod event_loop {
                 ))
                 .await;
         }
-    }
-
-    /// Whether a response belongs to one of our own periodic health checks —
-    /// those are not real user requests, and must not count towards Hydra
-    /// micropayments.
-    async fn is_health_check_response(relay_state: &RelayState, request_id: &RequestId) -> bool {
-        relay_state
-            .requests_in_progress
-            .lock()
-            .await
-            .get(request_id)
-            .is_some_and(|r| r.is_health_check)
     }
 
     /// A background task to periodically remove timed-out requests from
@@ -1123,12 +1116,14 @@ pub mod event_loop {
         }
     }
 
-    /// Passes a WebSocket response on to the original HTTP requester.
+    /// Passes a WebSocket response on to the original HTTP requester. Returns
+    /// the matched request’s `is_health_check` flag, or `None` when the
+    /// request is unknown (e.g. it already timed out, and was cleaned up).
     async fn pass_on_response(
         response: JsonResponse,
         relay_state: &RelayState,
         asset_name: &AssetName,
-    ) {
+    ) -> Option<bool> {
         let request_id = response.id.clone();
 
         match relay_state
@@ -1138,6 +1133,7 @@ pub mod event_loop {
             .remove(&request_id)
         {
             Some(request_state) => {
+                let is_health_check = request_state.is_health_check;
                 relay_state
                     .responses_received
                     .fetch_add(1, atomic::Ordering::SeqCst);
@@ -1149,12 +1145,16 @@ pub mod event_loop {
                         request_id.0,
                     ),
                 }
+                Some(is_health_check)
             },
-            None => warn!(
-                "{}: received supposed response for non-existent request: {}",
-                asset_name.as_str(),
-                response.id.0,
-            ),
+            None => {
+                warn!(
+                    "{}: received supposed response for non-existent request: {}",
+                    asset_name.as_str(),
+                    response.id.0,
+                );
+                None
+            },
         }
     }
 
@@ -1260,30 +1260,34 @@ async fn check_platform_health_periodically(
 /// Sends a single `GET /` to the relay’s platform, exactly like a regular
 /// proxied HTTP request, i.e. without changing the WebSocket protocol.
 async fn check_platform_health(new_request_channel: &mpsc::Sender<RequestState>) -> PlatformHealth {
-    let (response_tx, response_rx) = oneshot::channel();
+    tokio::time::timeout(HEALTH_CHECK_TIMEOUT, async {
+        let (response_tx, response_rx) = oneshot::channel();
 
-    let request = RequestState {
-        respond_to: response_tx,
-        expires: std::time::Instant::now() + HEALTH_CHECK_TIMEOUT,
-        underlying: JsonRequest {
-            id: RequestId(Uuid::new_v4()),
-            method: JsonRequestMethod::GET,
-            path: "/".to_string(),
-            query: None,
-            header: vec![],
-            body_base64: String::new(),
-        },
-        is_health_check: true,
-    };
+        let request = RequestState {
+            respond_to: response_tx,
+            expires: std::time::Instant::now() + HEALTH_CHECK_TIMEOUT,
+            underlying: JsonRequest {
+                id: RequestId(Uuid::new_v4()),
+                method: JsonRequestMethod::GET,
+                path: "/".to_string(),
+                query: None,
+                header: vec![],
+                body_base64: String::new(),
+            },
+            is_health_check: true,
+        };
 
-    if new_request_channel.send(request).await.is_err() {
-        return PlatformHealth::unreachable();
-    }
+        if new_request_channel.send(request).await.is_err() {
+            return PlatformHealth::unreachable();
+        }
 
-    match tokio::time::timeout(HEALTH_CHECK_TIMEOUT, response_rx).await {
-        Ok(Ok(response)) => interpret_health_response(&response),
-        _ => PlatformHealth::unreachable(),
-    }
+        match response_rx.await {
+            Ok(response) => interpret_health_response(&response),
+            Err(_) => PlatformHealth::unreachable(),
+        }
+    })
+    .await
+    .unwrap_or_else(|_timed_out| PlatformHealth::unreachable())
 }
 
 fn interpret_health_response(response: &JsonResponse) -> PlatformHealth {

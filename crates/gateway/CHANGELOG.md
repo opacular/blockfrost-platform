@@ -2,6 +2,7 @@
 
 ### Added
 
+- Per-relay `blockfrost_gateway_relay_healthy`, `blockfrost_gateway_relay_has_data_node`, and `blockfrost_gateway_relay_version` metrics in `GET /metrics` (and the same data points in `GET /stats`)
 - Prometheus metrics endpoint `GET /metrics` exposing per-relay stats (connection status, WebSocket RTT, connected-since timestamp, request/response counters) and PostgreSQL connection-pool gauges (max size, open, available, waiting)
 - Prometheus counter `blockfrost_gateway_http_requests_total` with `method`, `route`, and `status_code` labels for Gateway API requests
 - `blockfrost_gateway_build_info` metric exposing the Gateway version and git revision
