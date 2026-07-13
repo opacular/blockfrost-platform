@@ -35,7 +35,7 @@
   "/blocks/{hash_or_number}/previous",
   "/blocks/{hash_or_number}/txs",
   "/blocks/latest/txs",
-  "/blocks/slot/{slot}",
+  "/blocks/slot/{slot_number}",
   "/txs/{hash}/delegations",
   "/epochs/{number}/parameters",
   "/epochs/latest/parameters",

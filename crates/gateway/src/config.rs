@@ -4,6 +4,7 @@ use clap::Parser;
 use serde::{Deserialize, Deserializer};
 use std::env::var;
 use std::fs::read_to_string;
+use std::num::NonZeroUsize;
 use std::str::FromStr;
 use std::{fs, path::PathBuf};
 use tracing::Level;
@@ -39,6 +40,7 @@ pub struct ServerInput {
 pub struct DbInput {
     pub connection_string: Option<String>,
     pub connection_string_file: Option<String>,
+    pub pool_max_size: NonZeroUsize,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -73,6 +75,7 @@ pub struct Server {
 #[derive(Debug, Deserialize, Clone)]
 pub struct Db {
     pub connection_string: String,
+    pub pool_max_size: NonZeroUsize,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -168,7 +171,10 @@ pub fn load_config(path: PathBuf) -> Config {
             peer_urls,
             peer_secret,
         },
-        database: Db { connection_string },
+        database: Db {
+            connection_string,
+            pool_max_size: toml_config.database.pool_max_size,
+        },
         blockfrost: Blockfrost {
             project_id,
             nft_asset: toml_config.blockfrost.nft_asset,
@@ -253,6 +259,12 @@ fn override_with_env(config: Config) -> Config {
         .unwrap_or_else(|_| config.server.log_level.to_string());
     let db_connection =
         var("BLOCKFROST_GATEWAY_DB_CONNECTION_STRING").unwrap_or(config.database.connection_string);
+    let pool_max_size = var("BLOCKFROST_GATEWAY_DB_POOL_MAX_SIZE")
+        .map(|s| {
+            s.parse::<NonZeroUsize>()
+                .expect("BLOCKFROST_GATEWAY_DB_POOL_MAX_SIZE must be an integer greater than 0")
+        })
+        .unwrap_or(config.database.pool_max_size);
     let project_id = var("BLOCKFROST_GATEWAY_PROJECT_ID").unwrap_or(config.blockfrost.project_id);
     let nft_asset = var("BLOCKFROST_GATEWAY_NFT_ASSET").unwrap_or(config.blockfrost.nft_asset);
     let network = network_from_project_id(&project_id).expect("invalid Blockfrost project_id");
@@ -277,6 +289,7 @@ fn override_with_env(config: Config) -> Config {
         },
         database: Db {
             connection_string: db_connection,
+            pool_max_size,
         },
         blockfrost: Blockfrost {
             project_id,
@@ -316,5 +329,29 @@ mod tests {
         std::fs::remove_file(&path).ok();
 
         read_secret_file(&path.to_string_lossy(), "test secret");
+    }
+
+    #[test]
+    fn pool_max_size_rejects_zero() {
+        let toml = r#"
+            connection_string = 'postgresql://user:pass@host:port/db'
+            pool_max_size = 0
+        "#;
+        let err = toml::from_str::<DbInput>(toml)
+            .expect_err("pool_max_size = 0 must be rejected at config-load time");
+        assert!(
+            err.to_string().contains("pool_max_size"),
+            "error should mention the offending field, got: {err}"
+        );
+    }
+
+    #[test]
+    fn pool_max_size_accepts_positive() {
+        let toml = r#"
+            connection_string = 'postgresql://user:pass@host:port/db'
+            pool_max_size = 6
+        "#;
+        let db: DbInput = toml::from_str(toml).expect("valid pool_max_size must parse");
+        assert_eq!(db.pool_max_size.get(), 6);
     }
 }

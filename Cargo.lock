@@ -557,6 +557,8 @@ dependencies = [
  "governor",
  "hex",
  "hyper",
+ "metrics",
+ "metrics-exporter-prometheus",
  "nix",
  "reqwest 0.13.2",
  "rstest",

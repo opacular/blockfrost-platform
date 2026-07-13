@@ -21,7 +21,7 @@ services:
       init-node:
         condition: service_completed_successfully
   dolos:
-    image: ghcr.io/txpipe/dolos:v1.0.3
+    image: ghcr.io/txpipe/dolos:v1.4.0
     entrypoint: /entrypoint.sh
     environment:
       NETWORK: $NETWORK

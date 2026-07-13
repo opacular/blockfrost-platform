@@ -7,6 +7,7 @@ use deadpool_diesel::postgres::{Manager, Pool};
 use diesel::prelude::*;
 use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
 use schema::users::dsl::*;
+use std::num::NonZeroUsize;
 
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations/");
 
@@ -15,10 +16,19 @@ pub struct DB {
     pool: Pool,
 }
 
+/// A point-in-time snapshot of the connection pool state, for metrics.
+pub struct PoolStatus {
+    pub max_size: usize,
+    pub size: usize,
+    pub available: usize,
+    pub waiting: usize,
+}
+
 impl DB {
-    pub async fn new(database_url: &str) -> Self {
+    pub async fn new(database_url: &str, pool_max_size: NonZeroUsize) -> Self {
         let manager = Manager::new(database_url, deadpool_diesel::Runtime::Tokio1);
         let pool = Pool::builder(manager)
+            .max_size(pool_max_size.get())
             .build()
             .expect("Failed to create pool.");
 
@@ -34,6 +44,16 @@ impl DB {
             .expect("Migration execution error.");
 
         Self { pool }
+    }
+
+    pub fn pool_status(&self) -> PoolStatus {
+        let status = self.pool.status();
+        PoolStatus {
+            max_size: status.max_size,
+            size: status.size,
+            available: status.available,
+            waiting: status.waiting,
+        }
     }
 
     pub async fn insert_request(&self, request: RequestNewItem) -> Result<Request, APIError> {

@@ -17,7 +17,11 @@ assert builtins.elem targetSystem ["x86_64-linux" "aarch64-linux" "aarch64-darwi
     ) {inherit inputs targetSystem unix;};
 in
   extendForTarget rec {
-    rustPackages = inputs.fenix.packages.${pkgs.stdenv.hostPlatform.system}.stable;
+    rustChannel = {
+      channel = "1.97.0";
+      sha256 = "sha256-OATSZm98Es5kIFuqaba+UvkQtFsVgJEBMmS+t6od5/U=";
+    };
+    rustPackages = inputs.fenix.packages.${pkgs.stdenv.hostPlatform.system}.toolchainOf rustChannel;
     craneLib = (inputs.crane.mkLib pkgs).overrideToolchain rustPackages.toolchain;
 
     src = lib.cleanSourceWith {
@@ -533,19 +537,9 @@ in
       mainnet = "https://aggregator.release-mainnet.api.mithril.network/aggregator";
     };
 
-    # FIXME: Dolos v1.0.0-rc.12 depends on a fjall branch that was deleted after merge:
-    # https://github.com/fjall-rs/fjall/pull/259
-    # Patch the source to use the pinned commit rev instead of the defunct branch name.
-    dolosSrc = pkgs.runCommand "dolos-src-patched" {} ''
-      cp -r ${inputs.dolos} $out
-      chmod -R +w $out
-      sed -i 's|branch = "recovery/change-flush-queueing"|rev = "2443c7bcf6f53920efef836518d76e865974c4ca"|' $out/Cargo.toml
-      sed -i 's|branch=recovery%2Fchange-flush-queueing|rev=2443c7bcf6f53920efef836518d76e865974c4ca|g' $out/Cargo.lock
-    '';
-
     dolos = craneLib.buildPackage (
       {
-        src = dolosSrc;
+        src = inputs.dolos;
         GIT_REVISION = inputs.dolos.rev;
         strictDeps = true;
         nativeBuildInputs =
@@ -788,6 +782,7 @@ in
 
             [database]
             connection_string = 'postgresql://unused:unused@127.0.0.1:5432/unused'
+            pool_max_size = 6
 
             [blockfrost]
             project_id = '${network}00000000000000000000000000000000'
@@ -1039,12 +1034,15 @@ in
     midnight = let
       fenix = inputs.fenix.packages.${pkgs.stdenv.hostPlatform.system};
 
+      wasmStd =
+        (fenix.targets.wasm32-unknown-unknown.toolchainOf rustChannel).rust-std;
+
       # A toolchain with the wasm32 target available:
       rustToolchain = fenix.combine [
-        fenix.stable.toolchain
-        fenix.targets.wasm32-unknown-unknown.stable.rust-std
-        fenix.stable.rust-src
-        fenix.stable.llvm-tools
+        rustPackages.toolchain
+        wasmStd
+        rustPackages.rust-src
+        rustPackages.llvm-tools
       ];
 
       craneLib = (inputs.crane.mkLib pkgs).overrideToolchain rustToolchain;
