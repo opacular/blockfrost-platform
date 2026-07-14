@@ -233,7 +233,8 @@ in rec {
   # depends on the `unix` package, see <https://github.com/cardano-scaling/hydra/issues/2360>.
   bundle =
     pkgs.runCommand "bundle" {
-      buildInputs = [pkgs.wine64];
+      # `wineWow64Packages` runs both 32- and 64-bit executables.
+      buildInputs = [pkgs.wineWow64Packages.stable];
       WINEDEBUG = "-all";
       WINEDLLOVERRIDES = "mscoree,mshtml="; # don't ask about Mono or Gecko
     } ''
@@ -242,7 +243,7 @@ in rec {
       mkdir -p $out
       cp -r ${packageWithIcon}/. $out/.
       cp -r ${dolos}/bin/. $out/.
-      wine64 $out/${packageName.pname}.exe --version
+      wine $out/${packageName.pname}.exe --version
     '';
 
   archive =
