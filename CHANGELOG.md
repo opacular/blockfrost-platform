@@ -2,7 +2,7 @@
 
 ### Added
 
-- Gateway: per-platform `blockfrost_gateway_relay_healthy`, `blockfrost_gateway_relay_has_data_node`, and `blockfrost_gateway_relay_version` metrics in `GET /metrics` (and the same data points in `GET /stats`)
+- Gateway: per-platform `blockfrost_gateway_relay_platform_healthy`, `blockfrost_gateway_relay_platform_data_node_connected`, and `blockfrost_gateway_relay_platform_info` metrics in `GET /metrics` (and the same data points in `GET /stats`)
 - New endpoints proxied to the data node: `/accounts/{stake_address}/utxos`, `/addresses/{address}`, and `/blocks/slot/{slot_number}`
 - `--max-response-body-bytes` to configure the maximum proxied response body size (default 10 MiB)
 

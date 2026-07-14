@@ -76,13 +76,13 @@ const RELAY_METRICS: &[RelayMetric] = &[
         |_| Some("1".to_string()),
     ),
     (
-        "blockfrost_gateway_relay_healthy",
+        "blockfrost_gateway_relay_platform_healthy",
         "gauge",
         "Whether the relay’s Platform reported healthy on the last periodic check (absent until the first check completes).",
         |r| r.healthy.map(|h| u8::from(h).to_string()),
     ),
     (
-        "blockfrost_gateway_relay_has_data_node",
+        "blockfrost_gateway_relay_platform_data_node_connected",
         "gauge",
         "Whether the relay’s Platform had a data node connected on the last periodic check.",
         |r| r.has_data_node.map(|h| u8::from(h).to_string()),
@@ -206,7 +206,7 @@ pub(crate) async fn render_prometheus(
 
     // The version metric needs an extra label, so it doesn’t fit `RELAY_METRICS`:
     {
-        let name = "blockfrost_gateway_relay_version";
+        let name = "blockfrost_gateway_relay_platform_info";
         writeln!(
             out,
             "# HELP {name} Version of the Platform run by the relay, in the `version` label (value is always 1)."
@@ -326,13 +326,13 @@ mod tests {
             "blockfrost_gateway_relay_up{relay=\"Icebreaker2\",api_prefix=\"513d26a9-9fea-4fbd-8ff4-d9ab00875c59\"} 1"
         ));
         assert!(out.contains(
-            "blockfrost_gateway_relay_healthy{relay=\"Icebreaker2\",api_prefix=\"513d26a9-9fea-4fbd-8ff4-d9ab00875c59\"} 1"
+            "blockfrost_gateway_relay_platform_healthy{relay=\"Icebreaker2\",api_prefix=\"513d26a9-9fea-4fbd-8ff4-d9ab00875c59\"} 1"
         ));
         assert!(out.contains(
-            "blockfrost_gateway_relay_has_data_node{relay=\"Icebreaker2\",api_prefix=\"513d26a9-9fea-4fbd-8ff4-d9ab00875c59\"} 0"
+            "blockfrost_gateway_relay_platform_data_node_connected{relay=\"Icebreaker2\",api_prefix=\"513d26a9-9fea-4fbd-8ff4-d9ab00875c59\"} 0"
         ));
         assert!(out.contains(
-            "blockfrost_gateway_relay_version{relay=\"Icebreaker2\",api_prefix=\"513d26a9-9fea-4fbd-8ff4-d9ab00875c59\",version=\"1.2.3\"} 1"
+            "blockfrost_gateway_relay_platform_info{relay=\"Icebreaker2\",api_prefix=\"513d26a9-9fea-4fbd-8ff4-d9ab00875c59\",version=\"1.2.3\"} 1"
         ));
         assert!(
             !out.contains("blockfrost_gateway_relay_network_rtt_seconds{relay=\"Icebreaker2\"")
@@ -352,11 +352,11 @@ mod tests {
             .await
             .expect("render metrics");
 
-        assert!(out.contains("# TYPE blockfrost_gateway_relay_healthy gauge"));
-        assert!(out.contains("# TYPE blockfrost_gateway_relay_version gauge"));
-        assert!(!out.contains("blockfrost_gateway_relay_healthy{"));
-        assert!(!out.contains("blockfrost_gateway_relay_has_data_node{"));
-        assert!(!out.contains("blockfrost_gateway_relay_version{"));
+        assert!(out.contains("# TYPE blockfrost_gateway_relay_platform_healthy gauge"));
+        assert!(out.contains("# TYPE blockfrost_gateway_relay_platform_info gauge"));
+        assert!(!out.contains("blockfrost_gateway_relay_platform_healthy{"));
+        assert!(!out.contains("blockfrost_gateway_relay_platform_data_node_connected{"));
+        assert!(!out.contains("blockfrost_gateway_relay_platform_info{"));
     }
 
     #[test]
