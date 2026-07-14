@@ -184,7 +184,7 @@ Currently, this new WebSocket endpoint is served by the same IceBreakers API dur
    }
    ```
 
-2. The `blockfrost-platform` API remains as-is on port 3000. After the WebSocket testing period it will no longer need to be open to the public, or have a UUID `api_prefix`.
+2. The `blockfrost-platform` API remains as-is on port 3000, but it no longer needs to be open to the public: all Blockfrost traffic arrives over the outbound WebSocket connection to the load balancers.
 
 ### Operational details
 

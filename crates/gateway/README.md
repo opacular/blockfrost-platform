@@ -8,8 +8,8 @@ When registering via the `/register` endpoint, the Blockfrost Gateway performs t
 
 - **Secret Verification:** Confirms that the provided secret is registered with Blockfrost.io.
 - **NFT License Validation:** Ensures that the reward address contains an NFT issued by Blockfrost.io, which serves as a license.
-- **Platform Accessibility Check:** Verifies that the platform is listening on the specified port and is publicly accessible.
 - **User Data Storage:** Upon successful registration, the user's data is saved in the database.
+- **Access Token Issuance:** The response includes one WebSocket URI per configured `peer_urls` entry (falling back to `server.url` or the request `Host`), each paired with a signed, expiring access token. The token is stateless: it carries the asset name, reward address, api prefix, and expiry, authenticated with a BLAKE3 keyed hash using the shared peer secret. The `blockfrost-platform` is expected to connect to every returned URI over WebSocket, presenting the token, instead of exposing a publicly routable port.
 
 ### Configuration
 
