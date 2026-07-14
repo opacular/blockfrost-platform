@@ -230,7 +230,7 @@ If you encounter issues with the `blockfrost-platform` binary or installer:
 
 - **Secret Key and Reward Address:** Ensure your `--secret` and `--reward-address` in the configuration file are correct.
 - **Firewall:** Ensure your firewall allows outbound connections to the Icebreakers API and load balancers.
-- **IPv6 Connectivity:** Check if your server can reach the IceBreakers API via IPv6. A simple `curl -v http://[IPv6-address]:[port]/` can help diagnose this. Consider adding an entry to your `/etc/hosts` file to resolve the Blockfrost server address to its IPv4 address as a workaround.
+- **IPv6 Connectivity:** Check if your server can reach the Icebreakers API via IPv6. A simple `curl -v http://[IPv6-address]:[port]/` can help diagnose this. Consider adding an entry to your `/etc/hosts` file to resolve the Blockfrost server address to its IPv4 address as a workaround.
 - **Network Namespace:** If IPv6 is causing issues, consider running `blockfrost-platform` within a network namespace with IPv6 disabled.
 - **Open Issues:** Check the [GitHub Issues](https://github.com/blockfrost/blockfrost-platform/issues) for known problems and potential solutions.
 

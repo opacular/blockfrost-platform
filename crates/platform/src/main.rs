@@ -66,7 +66,7 @@ async fn main() -> Result<(), AppError> {
 
     info!("Server is listening on http://{}{}", address, api_prefix);
 
-    // IceBreakers registration and the load balancer task.
+    // Icebreakers registration and the load balancer task.
     //
     // Whenever a single load balancer connection breaks, we drop all of them,
     // and re-register to get a new set of access tokens. It’s complicated by
@@ -115,7 +115,7 @@ async fn main() -> Result<(), AppError> {
             )
             .await?;
         } else {
-            warn!("Hydra micropayments won’t run without a valid IceBreakers config.");
+            warn!("Hydra micropayments won’t run without a valid Icebreakers config.");
         }
     }
 

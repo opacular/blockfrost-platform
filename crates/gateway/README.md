@@ -4,7 +4,7 @@ The Blockfrost Gateway provides a root endpoint to check the status and version 
 
 ### Registration Process
 
-When registering via the `/register` endpoint, the Blockfrost Gateway performs the following checks:
+When registering via the `/register` endpoint, the Blockfrost Gateway performs the following steps:
 
 - **Secret Verification:** Confirms that the provided secret is registered with Blockfrost.io.
 - **NFT License Validation:** Ensures that the reward address contains an NFT issued by Blockfrost.io, which serves as a license.

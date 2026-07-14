@@ -80,13 +80,13 @@ In [non-solitary mode](/options), when registering with the `blockfrost-icebreak
 
 `blockfrost-platform` connects to the WebSocket endpoint, and sets `Authorization: Bearer <access_token>`.
 
-Currently, this new WebSocket endpoint is served by the same IceBreakers API during initial testing. In the future, there will be multiple load balancers for high-availability.
+Currently, this new WebSocket endpoint is served by the same Icebreakers API during initial testing. In the future, there will be multiple load balancers for high-availability.
 
 ### 3. Ping–Pong to monitor connection liveness, and the round-trip time
 
 1. Both sides exchange `Ping` and `Pong` messages continuously, which allows us to detect the other side going offline quite quickly, even with silently dropped packets. And also to measure the pure network round-trip time, without the overhead of any advanced calculations.
 
-2. The load balancer code exposes a `GET /stats` endpoint, where you can see all currently connected IceBreakers:
+2. The load balancer code exposes a `GET /stats` endpoint, where you can see all currently connected Icebreakers:
 
    ```
    ❯ curl -fsSL https://icebreakers-api.blockfrost.io/stats | jq .
