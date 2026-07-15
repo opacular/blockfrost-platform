@@ -184,7 +184,7 @@ sequenceDiagram
    }
    ```
 
-2. `blockfrost-platform` API はこれまでどおりポート 3000 で動作します。WebSocket テスト期間の終了後は、外部公開や UUID 形式の `api_prefix` を持つ必要はなくなります。
+2. `blockfrost-platform` API はこれまでどおりポート 3000 で動作しますが、外部に公開する必要はありません。Blockfrost のトラフィックはすべて、ロードバランサーへのアウトバウンドの WebSocket 接続経由で届きます。
 
 ### 運用上の詳細
 

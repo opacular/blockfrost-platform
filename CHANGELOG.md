@@ -12,6 +12,10 @@
 - Restored `local_address` bind for unspecified IPs like `0.0.0.0`, fixing an IPv6 regression that broke the IPv4-forcing behavior of `--server-address 0.0.0.0`
 - Inverted the metrics answer in the `--init` config prompt
 
+### Removed
+
+- Gateway no longer performs a public port reachability check during registration. Relays connect outbound to the load balancers over WebSocket, so they no longer need a publicly routable inbound port.
+
 ## [1.0.0] - 2026-05-15
 
 ### Added

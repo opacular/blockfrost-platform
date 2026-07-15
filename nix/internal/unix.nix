@@ -689,9 +689,7 @@ in
     make-blockfrost-tests = {
       network,
       ignorelistOnly ? false,
-    }: let
-      inherit (pkgs) nodePackages;
-    in
+    }:
       pkgs.writeShellApplication {
         name =
           if ignorelistOnly
@@ -705,8 +703,8 @@ in
           bash
           coreutils
           gnugrep
-          nodePackages.nodejs
-          nodePackages.yarn
+          nodejs
+          yarn
           curl
           jq
           (python3.withPackages (ps: with ps; [portpicker]))
