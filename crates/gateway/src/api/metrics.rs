@@ -48,6 +48,9 @@ struct RelayMetrics {
     requests_sent: u64,
     responses_received: u64,
     requests_in_progress: u64,
+    healthy: Option<bool>,
+    has_data_node: Option<bool>,
+    version: Option<String>,
 }
 
 fn relay_labels(r: &RelayMetrics) -> String {
@@ -73,6 +76,18 @@ const RELAY_METRICS: &[RelayMetric] = &[
         |_| Some("1".to_string()),
     ),
     (
+        "blockfrost_gateway_relay_platform_healthy",
+        "gauge",
+        "Whether the relay’s Platform reported healthy on the last periodic check (absent until the first check completes).",
+        |r| r.healthy.map(|h| u8::from(h).to_string()),
+    ),
+    (
+        "blockfrost_gateway_relay_platform_data_node_connected",
+        "gauge",
+        "Whether the relay’s Platform had a data node connected on the last periodic check.",
+        |r| r.has_data_node.map(|h| u8::from(h).to_string()),
+    ),
+    (
         "blockfrost_gateway_relay_network_rtt_seconds",
         "gauge",
         "Last measured WebSocket round-trip time to the relay, in seconds.",
@@ -87,13 +102,13 @@ const RELAY_METRICS: &[RelayMetric] = &[
     (
         "blockfrost_gateway_relay_requests_sent_total",
         "counter",
-        "Total requests forwarded to the relay since it connected.",
+        "Total requests forwarded to the relay since it connected, including the Gateway’s periodic health checks.",
         |r| Some(r.requests_sent.to_string()),
     ),
     (
         "blockfrost_gateway_relay_responses_received_total",
         "counter",
-        "Total responses received from the relay since it connected.",
+        "Total responses received from the relay since it connected, including responses to the Gateway’s periodic health checks.",
         |r| Some(r.responses_received.to_string()),
     ),
     (
@@ -121,6 +136,7 @@ pub(crate) async fn render_prometheus(
 
     let mut relays: Vec<RelayMetrics> = Vec::with_capacity(snapshot.len());
     for (api_prefix, relay_state) in &snapshot {
+        let platform_health = relay_state.platform_health.lock().await.clone();
         relays.push(RelayMetrics {
             relay: relay_state.name.0.clone(),
             api_prefix: *api_prefix,
@@ -136,6 +152,9 @@ pub(crate) async fn render_prometheus(
                 .responses_received
                 .load(atomic::Ordering::SeqCst),
             requests_in_progress: relay_state.requests_in_progress.lock().await.len() as u64,
+            healthy: platform_health.as_ref().map(|h| h.healthy),
+            has_data_node: platform_health.as_ref().and_then(|h| h.has_data_node),
+            version: platform_health.and_then(|h| h.version),
         });
     }
 
@@ -185,6 +204,27 @@ pub(crate) async fn render_prometheus(
         }
     }
 
+    // The version metric needs an extra label, so it doesn’t fit `RELAY_METRICS`:
+    {
+        let name = "blockfrost_gateway_relay_platform_info";
+        writeln!(
+            out,
+            "# HELP {name} Version of the Platform run by the relay, in the `version` label (value is always 1)."
+        )?;
+        writeln!(out, "# TYPE {name} gauge")?;
+        for r in &relays {
+            if let Some(version) = &r.version {
+                writeln!(
+                    out,
+                    "{name}{{relay=\"{}\",api_prefix=\"{}\",version=\"{}\"}} 1",
+                    sanitize_label_value(&r.relay),
+                    r.api_prefix,
+                    sanitize_label_value(version),
+                )?;
+            }
+        }
+    }
+
     Ok(out)
 }
 
@@ -214,7 +254,7 @@ pub async fn route(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::load_balancer::RelayState;
+    use crate::load_balancer::{PlatformHealth, RelayState};
     use crate::types::AssetName;
     use std::collections::HashMap;
     use std::sync::Arc;
@@ -246,6 +286,7 @@ mod tests {
             connected_since: std::time::Instant::now(),
             requests_sent: Arc::new(atomic::AtomicU64::new(0)),
             responses_received: Arc::new(atomic::AtomicU64::new(0)),
+            platform_health: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -256,6 +297,11 @@ mod tests {
         let relay = test_relay_state("Icebreaker2");
         relay.requests_sent.store(5, atomic::Ordering::SeqCst);
         relay.responses_received.store(4, atomic::Ordering::SeqCst);
+        *relay.platform_health.lock().await = Some(PlatformHealth {
+            healthy: true,
+            version: Some("1.2.3".to_string()),
+            has_data_node: Some(false),
+        });
         lb.active_relays.lock().await.insert(uuid, relay);
 
         let out = render_prometheus(&lb, &test_pool_status())
@@ -279,9 +325,38 @@ mod tests {
         assert!(out.contains(
             "blockfrost_gateway_relay_up{relay=\"Icebreaker2\",api_prefix=\"513d26a9-9fea-4fbd-8ff4-d9ab00875c59\"} 1"
         ));
+        assert!(out.contains(
+            "blockfrost_gateway_relay_platform_healthy{relay=\"Icebreaker2\",api_prefix=\"513d26a9-9fea-4fbd-8ff4-d9ab00875c59\"} 1"
+        ));
+        assert!(out.contains(
+            "blockfrost_gateway_relay_platform_data_node_connected{relay=\"Icebreaker2\",api_prefix=\"513d26a9-9fea-4fbd-8ff4-d9ab00875c59\"} 0"
+        ));
+        assert!(out.contains(
+            "blockfrost_gateway_relay_platform_info{relay=\"Icebreaker2\",api_prefix=\"513d26a9-9fea-4fbd-8ff4-d9ab00875c59\",version=\"1.2.3\"} 1"
+        ));
         assert!(
             !out.contains("blockfrost_gateway_relay_network_rtt_seconds{relay=\"Icebreaker2\"")
         );
+    }
+
+    #[tokio::test]
+    async fn omits_health_metrics_before_first_check() {
+        let lb = LoadBalancerState::new(None, test_key());
+        let uuid = Uuid::parse_str("00000000-0000-0000-0000-000000000002").unwrap();
+        lb.active_relays
+            .lock()
+            .await
+            .insert(uuid, test_relay_state("Icebreaker2"));
+
+        let out = render_prometheus(&lb, &test_pool_status())
+            .await
+            .expect("render metrics");
+
+        assert!(out.contains("# TYPE blockfrost_gateway_relay_platform_healthy gauge"));
+        assert!(out.contains("# TYPE blockfrost_gateway_relay_platform_info gauge"));
+        assert!(!out.contains("blockfrost_gateway_relay_platform_healthy{"));
+        assert!(!out.contains("blockfrost_gateway_relay_platform_data_node_connected{"));
+        assert!(!out.contains("blockfrost_gateway_relay_platform_info{"));
     }
 
     #[test]
