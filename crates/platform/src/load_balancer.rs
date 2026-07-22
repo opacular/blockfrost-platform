@@ -1,0 +1,883 @@
+use crate::hydra_client;
+use crate::icebreakers::api::IcebreakersAPI;
+use crate::server::state::ApiPrefix;
+use bf_common::errors::BlockfrostError;
+use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
+use tokio::sync::Mutex;
+use tokio::sync::{mpsc, watch};
+use tokio::task::JoinHandle;
+use tokio_util::sync::CancellationToken;
+use tracing::{error, info, warn};
+use uuid::Uuid;
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct LoadBalancerConfig {
+    pub uri: String,
+    pub access_token: String,
+}
+
+/// It’s slightly less than on the server side to desynchronize
+/// [`LoadBalancerMessage::Ping`] with [`RelayMessage::Ping`]:.
+const WS_PING_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(13);
+
+/// How long we allow Axum to work on a [`JsonRequest`].
+const REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// How long to wait before retrying a failed WebSocket connection.
+const RECONNECT_DELAY: std::time::Duration = std::time::Duration::from_secs(15);
+
+/// How long to wait before retrying when initial registration fails.
+const INITIAL_REGISTER_RETRY: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// How often the supervisor re-registers to detect gateway list changes.
+const PERIODIC_REREGISTER: std::time::Duration = std::time::Duration::from_secs(30 * 60);
+
+#[derive(Clone)]
+struct ConnContext {
+    http_router: axum::Router,
+    health_errors: Arc<Mutex<Vec<BlockfrostError>>>,
+    api_prefix: ApiPrefix,
+    icebreakers_api: Arc<IcebreakersAPI>,
+    max_response_body_bytes: usize,
+}
+
+/// Supervises WebSocket connections to gateways.
+///
+/// Handles the full lifecycle:
+/// 1. Registers with the gateway (retrying on failure).
+/// 2. Spawns one self-reconnecting task per gateway endpoint.
+/// 3. Periodically re-registers (every `PERIODIC_REREGISTER`) to detect
+///    gateway list changes: new gateways get tasks spawned, removed gateways
+///    have their tasks aborted, existing connections are left untouched.
+#[allow(clippy::type_complexity)]
+pub async fn run_all(
+    http_router: axum::Router,
+    health_errors: Arc<Mutex<Vec<BlockfrostError>>>,
+    api_prefix: ApiPrefix,
+    hydra_kex: Option<(
+        watch::Sender<Option<mpsc::Sender<hydra_client::KeyExchangeRequest>>>,
+        mpsc::Sender<hydra_client::KeyExchangeResponse>,
+        mpsc::Sender<hydra_client::TerminateRequest>,
+    )>,
+    icebreakers_api: Arc<IcebreakersAPI>,
+    max_response_body_bytes: usize,
+) {
+    let ctx = ConnContext {
+        http_router,
+        health_errors,
+        api_prefix,
+        icebreakers_api,
+        max_response_body_bytes,
+    };
+
+    let mut active: HashMap<String, JoinHandle<()>> = HashMap::new();
+    // Move into a mutable binding so we can `.take()` it exactly once — the
+    // first connection in the first successful batch gets it.
+    let mut hydra_kex = hydra_kex;
+
+    loop {
+        if active.is_empty() {
+            info!("registering with Icebreakers API...");
+        } else {
+            info!("periodic re-registration with Icebreakers API...");
+        }
+        match ctx.icebreakers_api.register().await {
+            Ok(response) => {
+                // A successful registration supersedes any earlier failure:
+                ctx.health_errors.lock().await.clear();
+
+                let new_configs: Vec<_> = response.load_balancers.into_iter().flatten().collect();
+
+                if new_configs.is_empty() {
+                    if active.is_empty() {
+                        warn!("registration returned no gateways; nothing to connect to");
+                    } else {
+                        info!(
+                            "periodic re-registration returned no gateways; \
+                             keeping {} existing connection(s)",
+                            active.len()
+                        );
+                    }
+                } else {
+                    reconcile_connections(&ctx, &new_configs, &mut active, &mut hydra_kex);
+                }
+            },
+            Err(err) => {
+                if active.is_empty() {
+                    error!("registration failed: {}", err);
+                    *ctx.health_errors.lock().await = vec![err.into()];
+                } else {
+                    warn!(
+                        "periodic re-registration failed: {}; \
+                         keeping {} existing connection(s)",
+                        err,
+                        active.len()
+                    );
+                }
+            },
+        }
+
+        // If we have no connections yet (initial registration failed or
+        // returned empty), retry faster. Otherwise wait the full period.
+        let delay = if active.is_empty() {
+            INITIAL_REGISTER_RETRY
+        } else {
+            PERIODIC_REREGISTER
+        };
+        tokio::time::sleep(delay).await;
+    }
+}
+
+/// Diffs the current set of active connections against the new config list:
+/// aborts tasks for removed gateways, spawns tasks for new ones, and leaves
+/// existing connections untouched.
+#[allow(clippy::type_complexity)]
+fn reconcile_connections(
+    ctx: &ConnContext,
+    new_configs: &[LoadBalancerConfig],
+    active: &mut HashMap<String, JoinHandle<()>>,
+    hydra_kex: &mut Option<(
+        watch::Sender<Option<mpsc::Sender<hydra_client::KeyExchangeRequest>>>,
+        mpsc::Sender<hydra_client::KeyExchangeResponse>,
+        mpsc::Sender<hydra_client::TerminateRequest>,
+    )>,
+) {
+    // Clean up finished tasks so stale entries don't prevent re-spawning a
+    // URI that came back.
+    active.retain(|uri, handle| {
+        if handle.is_finished() {
+            info!("connection task for {} has finished; removing", uri);
+            false
+        } else {
+            true
+        }
+    });
+
+    let new_uris: HashSet<&str> = new_configs.iter().map(|c| c.uri.as_str()).collect();
+
+    // Abort tasks for gateways no longer in the config.
+    let removed: Vec<String> = active
+        .keys()
+        .filter(|uri| !new_uris.contains(uri.as_str()))
+        .cloned()
+        .collect();
+    for uri in removed {
+        if let Some(handle) = active.remove(&uri) {
+            info!("gateway {} removed from config; stopping task", uri);
+            handle.abort();
+        }
+    }
+
+    // Spawn tasks for newly discovered gateways.
+    let first_batch = active.is_empty();
+    for (idx, config) in new_configs.iter().enumerate() {
+        if !active.contains_key(&config.uri) {
+            if !first_batch {
+                info!("new gateway {} discovered; starting task", config.uri);
+            }
+            let handle = tokio::spawn(run_one_with_reconnect(
+                ctx.clone(),
+                config.clone(),
+                // FIXME: for now, only pass hydra_kex to the very first
+                // connection in the very first batch.
+                if first_batch && idx == 0 {
+                    hydra_kex.take()
+                } else {
+                    None
+                },
+            ));
+            active.insert(config.uri.clone(), handle);
+        }
+    }
+
+    info!("{} active connection(s)", active.len());
+}
+
+/// Runs a single WebSocket connection with automatic reconnection.
+///
+/// On failure, waits [`RECONNECT_DELAY`], re-registers to refresh the access
+/// token (in case it expired), and retries — without disturbing any sibling
+/// connections managed by [`run_all`].
+///
+/// Self-terminates when re-registration returns a non-empty config list that
+/// no longer includes this connection's URI (the supervisor will clean up the
+/// finished task).
+#[allow(clippy::type_complexity)]
+async fn run_one_with_reconnect(
+    ctx: ConnContext,
+    mut config: LoadBalancerConfig,
+    hydra_kex: Option<(
+        watch::Sender<Option<mpsc::Sender<hydra_client::KeyExchangeRequest>>>,
+        mpsc::Sender<hydra_client::KeyExchangeResponse>,
+        mpsc::Sender<hydra_client::TerminateRequest>,
+    )>,
+) {
+    loop {
+        let result = event_loop::run(ctx.clone(), config.clone(), hydra_kex.clone()).await;
+
+        match &result {
+            Ok(()) => {
+                info!("connection to {} ended cleanly", config.uri);
+            },
+            Err(err) => {
+                warn!(
+                    "connection to {} failed: {}; will retry in {:?}",
+                    config.uri, err, RECONNECT_DELAY,
+                );
+            },
+        }
+
+        tokio::time::sleep(RECONNECT_DELAY).await;
+
+        // Try to re-register to refresh the access token. If re-registration
+        // fails (e.g. the registration gateway is down), keep the old token
+        // and attempt the WebSocket connection anyway:
+        info!("re-registering to refresh token for {}", config.uri);
+        match ctx.icebreakers_api.register().await {
+            Ok(response) => {
+                let new_configs: Vec<_> = response.load_balancers.into_iter().flatten().collect();
+                if new_configs.is_empty() {
+                    // Empty response might be a transient issue; keep retrying
+                    // with the existing token.
+                    warn!(
+                        "re-registration returned no gateways; \
+                         retrying {} with existing token",
+                        config.uri,
+                    );
+                } else if let Some(new_config) =
+                    new_configs.into_iter().find(|c| c.uri == config.uri)
+                {
+                    info!("refreshed access token for {}", config.uri);
+                    config.access_token = new_config.access_token;
+                } else {
+                    // Non-empty list that doesn't include our URI — the
+                    // gateway no longer wants this connection. Stop so the
+                    // supervisor can clean up.
+                    info!(
+                        "re-registration succeeded but {} is no longer \
+                         in the config; stopping this connection",
+                        config.uri,
+                    );
+                    break;
+                }
+            },
+            Err(err) => {
+                warn!(
+                    "re-registration failed: {}; retrying {} with existing token",
+                    err, config.uri,
+                );
+            },
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+struct RequestId(Uuid);
+
+#[derive(Serialize, Deserialize, Debug)]
+struct JsonRequest {
+    id: RequestId,
+    method: JsonRequestMethod,
+    path: String,
+    query: Option<String>,
+    header: Vec<JsonHeader>,
+    body_base64: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct JsonResponse {
+    id: RequestId,
+    code: u16,
+    header: Vec<JsonHeader>,
+    body_base64: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct JsonHeader {
+    name: String,
+    value: String,
+}
+
+#[allow(clippy::upper_case_acronyms)]
+#[derive(Serialize, Deserialize, Debug)]
+enum JsonRequestMethod {
+    GET,
+    POST,
+}
+
+impl JsonRequestMethod {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            JsonRequestMethod::GET => "GET",
+            JsonRequestMethod::POST => "POST",
+        }
+    }
+}
+
+/// The WebSocket messages that we receive.
+#[derive(Serialize, Deserialize, Debug)]
+enum LoadBalancerMessage {
+    Request(JsonRequest),
+    HydraKExResponse(hydra_client::KeyExchangeResponse),
+    HydraTunnel(bf_common::tcp_mux_tunnel::TunnelMsg),
+    Ping(u64),
+    Pong(u64),
+    Error { code: u64, msg: String },
+}
+
+/// The WebSocket messages that we send.
+#[derive(Serialize, Deserialize, Debug)]
+enum RelayMessage {
+    Response(JsonResponse),
+    HydraKExRequest(hydra_client::KeyExchangeRequest),
+    HydraTunnel(bf_common::tcp_mux_tunnel::TunnelMsg),
+    Ping(u64),
+    Pong(u64),
+}
+
+mod event_loop {
+    use crate::server::state::ApiPrefix;
+
+    use super::*;
+    use tungstenite::protocol::Message;
+
+    /// For clarity, let’s have a single connection 'event_loop per WebSocket
+    /// connection, with the following events:
+    enum LBEvent {
+        NewLoadBalancerMessage(LoadBalancerMessage),
+        NewResponse(JsonResponse),
+        HydraKExRequest(hydra_client::KeyExchangeRequest),
+        PingTick,
+        SocketError(String),
+    }
+
+    /// Top-level logic of a single WebSocket connection with a load balancer.
+    // FIXME: refactor
+    #[allow(clippy::type_complexity)]
+    pub async fn run(
+        ctx: ConnContext,
+        config: LoadBalancerConfig,
+        hydra_kex: Option<(
+            watch::Sender<Option<mpsc::Sender<hydra_client::KeyExchangeRequest>>>,
+            mpsc::Sender<hydra_client::KeyExchangeResponse>,
+            mpsc::Sender<hydra_client::TerminateRequest>,
+        )>,
+    ) -> Result<(), String> {
+        let socket = connect(config.clone()).await?;
+        *ctx.health_errors.lock().await = vec![];
+
+        let (event_tx, mut event_rx) = mpsc::channel::<LBEvent>(64);
+        let (socket_tx, request_task, arbitrary_msg_task) =
+            wire_requests(event_tx.clone(), socket, config.clone()).await;
+
+        let hydra_kex_fwd_task = {
+            let event_tx = event_tx.clone();
+            let hydra_kex = hydra_kex.clone();
+            tokio::spawn(async move {
+                if let Some(hydra_kex) = hydra_kex {
+                    let (tx, mut rx) = mpsc::channel(32);
+                    if let Err(e) = hydra_kex.0.send(Some(tx)) {
+                        error!("hydra_kex_fwd_task: `watch::Receiver` is unexpectedly closed: {e}")
+                    } else {
+                        while let Some(req) = rx.recv().await {
+                            let _ = event_tx.send(LBEvent::HydraKExRequest(req)).await;
+                        }
+                    }
+                }
+            })
+        };
+
+        let schedule_ping_tick = {
+            let event_tx = event_tx.clone();
+            move || {
+                let tx = event_tx.clone();
+                tokio::spawn(async move {
+                    tokio::time::sleep(WS_PING_TIMEOUT).await;
+                    let _ignored_failure: Result<_, _> = tx.send(LBEvent::PingTick).await;
+                })
+            }
+        };
+
+        // Event loop state (let’s keep it minimal, please):
+        let mut last_ping_sent_at: Option<std::time::Instant> = None;
+        let mut last_ping_id: u64 = 0;
+        let mut loop_error: Result<(), String> = Ok(());
+
+        // Schedule the first `PingTick` immediately, otherwise we won’t start
+        // checking for ping timeout:
+        schedule_ping_tick();
+
+        let tunnel_cancellation = CancellationToken::new();
+        let mut tunnel_controller: Option<bf_common::tcp_mux_tunnel::Tunnel> = None;
+
+        // The actual connection event loop:
+        'event_loop: while let Some(msg) = event_rx.recv().await {
+            match msg {
+                LBEvent::SocketError(err) => {
+                    loop_error = Err(err);
+                    break 'event_loop;
+                },
+
+                LBEvent::NewLoadBalancerMessage(LoadBalancerMessage::HydraTunnel(tun_msg)) => {
+                    if let Some(tunnel_ctl) = &tunnel_controller {
+                        match tunnel_ctl.on_msg(tun_msg).await {
+                            Ok(()) => (),
+                            Err(err) => error!(
+                                "hydra-tunnel: got an error when passing message through WebSocket: {err}; ignoring"
+                            ),
+                        }
+                    }
+                },
+
+                LBEvent::NewLoadBalancerMessage(LoadBalancerMessage::HydraKExResponse(resp)) => {
+                    if let Some(hydra_kex) = &hydra_kex {
+                        // Only start the TCP-over-WebSocket tunnels if we’re running
+                        // on different machines:
+                        if resp.machine_id != bf_common::hydra::MachineId::of_this_host() {
+                            let (tunnel_ctl, mut tunnel_rx) =
+                                bf_common::tcp_mux_tunnel::Tunnel::new(
+                                    bf_common::tcp_mux_tunnel::TunnelConfig {
+                                        expose_port: resp.proposed_platform_h2h_port,
+                                        id_prefix_bit: true,
+                                        ..(bf_common::tcp_mux_tunnel::TunnelConfig::default())
+                                    },
+                                    tunnel_cancellation.clone(),
+                                );
+
+                            // This really shouldn’t fail, unless we hit the
+                            // TOCTOU race condition (very, very rare):
+                            if let Err(err) = tunnel_ctl.spawn_listener(resp.gateway_h2h_port).await
+                            {
+                                error!(
+                                    "hydra-tunnel: failed to bind listener on port {}: {err}",
+                                    resp.gateway_h2h_port
+                                );
+                                loop_error = Err(format!(
+                                    "hydra-tunnel: failed to bind listener on port {}: {err}",
+                                    resp.gateway_h2h_port
+                                ));
+                                break 'event_loop;
+                            }
+
+                            let socket_tx_ = socket_tx.clone();
+                            let config_ = config.clone();
+                            tokio::spawn(async move {
+                                while let Some(tun_msg) = tunnel_rx.recv().await {
+                                    if send_json_msg(
+                                        &socket_tx_,
+                                        &LoadBalancerMessage::HydraTunnel(tun_msg),
+                                        &config_,
+                                    )
+                                    .await
+                                    .is_err()
+                                    {
+                                        break;
+                                    }
+                                }
+                            });
+
+                            tunnel_controller = Some(tunnel_ctl);
+                        }
+
+                        let _ = hydra_kex.1.send(resp).await;
+                    }
+                },
+
+                LBEvent::NewLoadBalancerMessage(LoadBalancerMessage::Error { code, msg }) => {
+                    error!(
+                        "load balancer: {}: received error from gateway: code={}, msg={}",
+                        config.uri, code, msg,
+                    );
+                },
+
+                LBEvent::NewLoadBalancerMessage(LoadBalancerMessage::Request(request)) => {
+                    let router = ctx.http_router.clone(); // cheap, and Axum also does it for each request
+                    let event_tx = event_tx.clone();
+                    let api_prefix = ctx.api_prefix.clone();
+                    let max_response_body_bytes = ctx.max_response_body_bytes;
+                    tokio::spawn(async move {
+                        let response =
+                            handle_one(router, request, api_prefix, max_response_body_bytes).await;
+                        let _ignored_failure: Result<_, _> =
+                            event_tx.send(LBEvent::NewResponse(response)).await;
+                    });
+                },
+
+                LBEvent::NewResponse(response) => {
+                    if let Err(err) =
+                        send_json_msg(&socket_tx, &RelayMessage::Response(response), &config).await
+                    {
+                        loop_error = Err(err);
+                        break 'event_loop;
+                    }
+                },
+
+                LBEvent::NewLoadBalancerMessage(LoadBalancerMessage::Ping(ping_id)) => {
+                    if let Err(err) =
+                        send_json_msg(&socket_tx, &RelayMessage::Pong(ping_id), &config).await
+                    {
+                        loop_error = Err(err);
+                        break 'event_loop;
+                    }
+                },
+
+                LBEvent::NewLoadBalancerMessage(LoadBalancerMessage::Pong(pong_id)) => {
+                    if pong_id == last_ping_id {
+                        last_ping_sent_at = None;
+                    }
+                },
+
+                LBEvent::PingTick => {
+                    if let Some(_sent_at) = last_ping_sent_at {
+                        // Ping timeout:
+                        loop_error = Err("ping timeout".to_string());
+                        break 'event_loop;
+                    } else {
+                        // The periodic `PingTick` loop:
+                        schedule_ping_tick();
+                        // Time to send a new ping:
+                        last_ping_id += 1;
+                        last_ping_sent_at = Some(std::time::Instant::now());
+                        if send_json_msg(
+                            &socket_tx,
+                            &LoadBalancerMessage::Ping(last_ping_id),
+                            &config,
+                        )
+                        .await
+                        .is_err()
+                        {
+                            break 'event_loop;
+                        }
+                    }
+                },
+
+                LBEvent::HydraKExRequest(req) => {
+                    if send_json_msg(&socket_tx, &RelayMessage::HydraKExRequest(req), &config)
+                        .await
+                        .is_err()
+                    {
+                        break 'event_loop;
+                    }
+                },
+            }
+        }
+
+        if let Some(hydra_kex) = hydra_kex {
+            let _ = hydra_kex.2.send(hydra_client::TerminateRequest).await;
+        }
+
+        tunnel_cancellation.cancel();
+
+        // Wait for all children to finish:
+        let children = [request_task, arbitrary_msg_task, hydra_kex_fwd_task];
+        children.iter().for_each(|t| t.abort());
+        futures::future::join_all(children).await;
+
+        loop_error
+    }
+
+    async fn connect(
+        config: LoadBalancerConfig,
+    ) -> Result<
+        tokio_tungstenite::WebSocketStream<
+            tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+        >,
+        String,
+    > {
+        use tungstenite::client::IntoClientRequest;
+        info!("connecting to {}", config.uri);
+        let mut request = config.uri.clone().into_client_request().unwrap();
+        request.headers_mut().insert(
+            "Authorization",
+            format!("Bearer {}", config.access_token).parse().unwrap(),
+        );
+        let (ws_stream, _response) = tokio_tungstenite::connect_async(request)
+            .await
+            .map_err(|err| err.to_string())?;
+        info!("connected to {}", config.uri);
+        Ok(ws_stream)
+    }
+
+    /// Sends a JSON message to a WebSocket. `Err(_)` is returned when you
+    /// need to break the 'event_loop, because the connection is already broken.
+    async fn send_json_msg<J>(
+        socket_tx: &mpsc::Sender<Message>,
+        msg: &J,
+        config: &LoadBalancerConfig,
+    ) -> Result<(), String>
+    where
+        J: ?Sized + serde::ser::Serialize,
+    {
+        match serde_json::to_string(msg) {
+            Ok(msg) => {
+                match socket_tx.send(Message::Text(msg.into())).await {
+                    Ok(_) => Ok(()),
+                    Err(err) => {
+                        error!("{}: error when sending a Pong: {:?}", config.uri, err);
+                        // Something wrong with the socket, let’s break the 'event_loop:
+                        Err("broken connection with the load balancer".to_string())
+                    },
+                }
+            },
+            Err(err) => {
+                // This branch is practically impossible, but for the sake of completeness:
+                // Let’s break 'event_loop, this seems the most elegant.
+                let err = format!(
+                    "error when serializing request to JSON (this will never happen): {err:?}"
+                );
+                error!("{}: {}", config.uri, err);
+                Err(err)
+            },
+        }
+    }
+
+    async fn wire_requests(
+        event_tx: mpsc::Sender<LBEvent>,
+        socket: tokio_tungstenite::WebSocketStream<
+            tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+        >,
+        config: LoadBalancerConfig,
+    ) -> (mpsc::Sender<Message>, JoinHandle<()>, JoinHandle<()>) {
+        use futures_util::{SinkExt, StreamExt};
+
+        let (msg_tx, mut msg_rx) = mpsc::channel::<Message>(64);
+        let (mut sock_tx, mut sock_rx) = socket.split();
+
+        let config_uri = config.uri.clone();
+        let request_task = tokio::spawn(async move {
+            'read_loop: loop {
+                match sock_rx.next().await {
+                    None => {
+                        let _ignored_failure: Result<_, _> = event_tx
+                            .send(LBEvent::SocketError("connection closed".to_string()))
+                            .await;
+                        break 'read_loop;
+                    },
+                    Some(Err(err)) => {
+                        let _ignored_failure: Result<_, _> = event_tx
+                            .send(LBEvent::SocketError(format!("stream error: {err:?}")))
+                            .await;
+                        break 'read_loop;
+                    },
+                    Some(Ok(Message::Close(frame))) => {
+                        warn!(
+                            "{}: relay disconnected (CloseFrame: {:?})",
+                            config.uri, frame,
+                        );
+                        let _ignored_failure: Result<_, _> = event_tx
+                            .send(LBEvent::SocketError("relay disconnected".to_string()))
+                            .await;
+                        break 'read_loop;
+                    },
+                    Some(Ok(Message::Frame(_) | Message::Ping(_) | Message::Pong(_))) => {}, // ignore, they’re handled by the library
+                    Some(Ok(Message::Binary(bin))) => {
+                        warn!(
+                            "{}: received unexpected binary message: {:?}",
+                            config.uri,
+                            hex::encode(bin),
+                        );
+                    },
+                    Some(Ok(Message::Text(text))) => {
+                        match serde_json::from_str::<LoadBalancerMessage>(&text) {
+                            Ok(msg) => {
+                                if event_tx
+                                    .send(LBEvent::NewLoadBalancerMessage(msg))
+                                    .await
+                                    .is_err()
+                                {
+                                    break 'read_loop;
+                                }
+                            },
+                            Err(err) => warn!(
+                                "{}: received unparsable text message: {:?}: {:?}",
+                                config.uri, text, err,
+                            ),
+                        };
+                    },
+                }
+            }
+        });
+        let arbitrary_msg_task = tokio::spawn(async move {
+            while let Some(msg) = msg_rx.recv().await {
+                match sock_tx.send(msg).await {
+                    Ok(()) => (),
+                    Err(err) => {
+                        error!(
+                            "load balancer: {}: error when sending a message: {:?}",
+                            config_uri, err
+                        );
+                        // Something wrong with the socket, let’s break the 'event_loop
+                        // (eventually, by closing `msg_rx`):
+                        break;
+                    },
+                }
+            }
+        });
+        (msg_tx, request_task, arbitrary_msg_task)
+    }
+
+    /// Passes one [`JsonRequest`] through our underlying original HTTP server.
+    /// Everything happens internally, in memory, without opening new TCP
+    /// connections etc. – very light.
+    async fn handle_one(
+        http_router: axum::Router,
+        request: JsonRequest,
+        api_prefix: ApiPrefix,
+        max_response_body_bytes: usize,
+    ) -> JsonResponse {
+        use axum::body::Body;
+        use hyper::StatusCode;
+        use hyper::{Request, Response};
+        use tower::ServiceExt;
+
+        let request_id = request.id.clone();
+        let request_id_ = request.id.clone();
+
+        let rv: Result<JsonResponse, (StatusCode, String)> = async {
+            let req: Request<Body> = json_to_request(request, api_prefix)?;
+
+            let response: Response<Body> =
+                tokio::time::timeout(REQUEST_TIMEOUT, http_router.into_service().oneshot(req))
+                    .await
+                    .map_err(|_elapsed| {
+                        (
+                            StatusCode::GATEWAY_TIMEOUT,
+                            format!("Timed out while waiting {REQUEST_TIMEOUT:?} for a response"),
+                        )
+                    })?
+                    .unwrap(); // unwrap is safe, because the error is a non-instantiable [`std::convert::Infallible`]
+
+            response_to_json(response, request_id, max_response_body_bytes).await
+        }
+        .await;
+
+        match rv {
+            Ok(ok) => ok,
+            Err((code, err)) => {
+                error!("returning {}, because: {}", code, err);
+                use base64::{Engine as _, engine::general_purpose};
+                JsonResponse {
+                    id: request_id_,
+                    code: code.into(),
+                    header: vec![],
+                    body_base64: general_purpose::STANDARD.encode(err.as_bytes()),
+                }
+            },
+        }
+    }
+}
+
+fn json_to_request(
+    json: JsonRequest,
+    api_prefix: ApiPrefix,
+) -> Result<hyper::Request<axum::body::Body>, (hyper::StatusCode, String)> {
+    use axum::body::Body;
+    use hyper::Request;
+    use hyper::StatusCode;
+
+    let body: Body = {
+        if json.body_base64.is_empty() {
+            Body::empty()
+        } else {
+            use base64::{Engine as _, engine::general_purpose};
+            let body_bytes: Vec<u8> =
+                general_purpose::STANDARD
+                    .decode(json.body_base64)
+                    .map_err(|err| {
+                        (
+                            StatusCode::BAD_REQUEST,
+                            format!("Invalid base64 encoding of body_base64: {err}"),
+                        )
+                    })?;
+            Body::from(body_bytes)
+        }
+    };
+
+    let uri = match json.query {
+        Some(query) => format!("{}{}?{}", api_prefix, json.path, query),
+        None => format!("{}{}", api_prefix, json.path),
+    };
+
+    let mut rv = Request::builder().method(json.method.as_str()).uri(uri);
+
+    for h in json.header {
+        rv = rv.header(h.name, h.value);
+    }
+
+    rv.body(body).map_err(|err| {
+        (
+            StatusCode::BAD_REQUEST,
+            format!("Error when constructing a request from JSON request: {err}"),
+        )
+    })
+}
+
+async fn response_to_json(
+    response: hyper::Response<axum::body::Body>,
+    request_id: RequestId,
+    max_response_body_bytes: usize,
+) -> Result<JsonResponse, (hyper::StatusCode, String)> {
+    use hyper::StatusCode;
+
+    let header: Vec<JsonHeader> = response
+        .headers()
+        .iter()
+        .flat_map(|(name, value)| {
+            value.to_str().ok().map(|value| JsonHeader {
+                name: name.to_string(),
+                value: value.to_string(),
+            })
+        })
+        .collect();
+
+    let code: u16 = response.status().into();
+
+    let body_base64: String = {
+        let body = response.into_body();
+        let body_bytes = axum::body::to_bytes(body, max_response_body_bytes)
+            .await
+            .map_err(|err| {
+                (
+                    StatusCode::BAD_GATEWAY,
+                    format!("Cannot read body of the response: {err}"),
+                )
+            })?;
+        use base64::{Engine as _, engine::general_purpose};
+        general_purpose::STANDARD.encode(body_bytes)
+    };
+
+    Ok(JsonResponse {
+        id: request_id,
+        code,
+        header,
+        body_base64,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::server::state::ApiPrefix;
+
+    #[test]
+    fn test_json_to_request_reconstructs_query() {
+        let request = JsonRequest {
+            id: RequestId(Uuid::new_v4()),
+            method: JsonRequestMethod::GET,
+            path: "/accounts/rewards".to_string(),
+            query: Some("count=3&page=2&order=asc".to_string()),
+            header: vec![],
+            body_base64: String::new(),
+        };
+
+        let prefix = Uuid::nil();
+        let request = json_to_request(request, ApiPrefix(Some(prefix))).unwrap();
+
+        assert_eq!(
+            request.uri().path_and_query().unwrap().as_str(),
+            "/00000000-0000-0000-0000-000000000000/accounts/rewards?count=3&page=2&order=asc"
+        );
+    }
+}

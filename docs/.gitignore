@@ -38,3 +38,8 @@ jspm_packages
 .next
 
 install-state.gz
+out
+_pagefind
+
+# TypeScript incremental build cache
+*.tsbuildinfo

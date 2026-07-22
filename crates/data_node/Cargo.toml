@@ -1,0 +1,17 @@
+[package]
+name = "blockfrost-platform-data-node"
+version.workspace = true
+license.workspace = true
+edition.workspace = true
+
+[dependencies]
+bf-common.workspace = true
+bf-api-provider.workspace = true
+serde.workspace = true
+reqwest.workspace = true
+axum.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+
+[lints]
+workspace = true

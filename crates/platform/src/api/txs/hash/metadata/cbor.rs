@@ -1,0 +1,16 @@
+use crate::txs::TxsPath;
+use crate::{api::ApiResult, server::state::AppState};
+use axum::extract::{Path, Query, State};
+use bf_api_provider::types::TxsMetadataCborResponse;
+use bf_common::pagination::{Pagination, PaginationQuery};
+
+pub async fn route(
+    State(state): State<AppState>,
+    Query(pagination_query): Query<PaginationQuery>,
+    Path(path): Path<TxsPath>,
+) -> ApiResult<TxsMetadataCborResponse> {
+    let pagination = Pagination::from_query(pagination_query)?;
+    let data_node = state.data_node()?;
+
+    data_node.txs().metadata_cbor(&path.hash, &pagination).await
+}

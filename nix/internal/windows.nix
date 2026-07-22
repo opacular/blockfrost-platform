@@ -2,10 +2,11 @@
   inputs,
   targetSystem,
 }:
-assert __elem targetSystem ["x86_64-windows"]; let
+assert builtins.elem targetSystem ["x86_64-windows"]; let
   buildSystem = "x86_64-linux";
   pkgs = inputs.nixpkgs.legacyPackages.${buildSystem};
   inherit (pkgs) lib;
+  inherit (inputs.self.internal.${buildSystem}) hydraScriptsEnvVars;
 in rec {
   toolchain = with inputs.fenix.packages.${buildSystem};
     combine [
@@ -16,12 +17,31 @@ in rec {
 
   craneLib = (inputs.crane.mkLib pkgs).overrideToolchain toolchain;
 
-  src = craneLib.cleanCargoSource ../../.;
+  src = lib.cleanSourceWith {
+    src = lib.cleanSource ../../.;
+    filter = path: type:
+      craneLib.filterCargoSources path type
+      || lib.hasSuffix ".sql" path
+      || lib.hasSuffix "/LICENSE" path;
+    name = "source";
+  };
 
   pkgsCross = pkgs.pkgsCross.mingwW64;
 
+  # Nixpkgs 25.11 restricts mingw_w64-pthreads meta.platforms to Windows only,
+  # which breaks cross-compilation from Linux. Override to allow it as a build dep.
+  pthreads = pkgsCross.windows.pthreads.overrideAttrs (old: {
+    meta = old.meta // {platforms = lib.platforms.all;};
+  });
+
+  # Cross-compile libpq for Windows (pkgsCross.postgresql is broken in Nixpkgs):
+  libpq-windows = import ./windows-libpq.nix {inherit pkgs pkgsCross pthreads;};
+
+  packageName = craneLib.crateNameFromCargoToml {cargoToml = src + "/crates/platform/Cargo.toml";};
+
   commonArgs = {
     inherit src;
+    inherit (packageName) pname;
     strictDeps = true;
 
     CARGO_BUILD_TARGET = "x86_64-pc-windows-gnu";
@@ -33,22 +53,60 @@ in rec {
     OPENSSL_LIB_DIR = "${pkgs.openssl.out}/lib";
     OPENSSL_INCLUDE_DIR = "${pkgs.openssl.dev}/include/";
 
+    PQ_LIB_DIR = "${libpq-windows}/lib";
+    PQ_LIB_STATIC = "1";
+
     depsBuildBuild = [
       pkgsCross.stdenv.cc
-      pkgsCross.windows.pthreads
+      pthreads
     ];
   };
 
   # For better caching:
   cargoArtifacts = craneLib.buildDepsOnly commonArgs;
 
-  package = craneLib.buildPackage (commonArgs
+  GIT_REVISION = inputs.self.rev or "dirty";
+
+  blockfrost-platform = craneLib.buildPackage (commonArgs
     // {
-      inherit cargoArtifacts;
+      inherit cargoArtifacts GIT_REVISION;
       doCheck = false; # we run Windows tests on real Windows on GHA
       postPatch = ''
-        sed -r '/^build = .*/d' -i Cargo.toml
-        rm build.rs
+        find -name 'Cargo.toml' | while IFS= read -r cargo_toml ; do
+          sed -r '/^build = .*/d' -i "$cargo_toml"
+        done
+        find -name 'build.rs' -delete
+      '';
+    });
+
+  gatewayCargoToml = builtins.fromTOML (builtins.readFile (builtins.path {path = src + "/crates/gateway/Cargo.toml";}));
+  sdkBridgeCargoToml = builtins.fromTOML (builtins.readFile (builtins.path {path = src + "/crates/sdk_bridge/Cargo.toml";}));
+  blockfrost-gateway = craneLib.buildPackage (commonArgs
+    // {
+      inherit cargoArtifacts GIT_REVISION;
+      pname = gatewayCargoToml.package.name;
+      doCheck = false; # we run Windows tests on real Windows on GHA
+      cargoExtraArgs = "--package blockfrost-gateway";
+      postPatch = ''
+        find -name 'Cargo.toml' | while IFS= read -r cargo_toml ; do
+          sed -r '/^build = .*/d' -i "$cargo_toml"
+        done
+        find -name 'build.rs' -delete
+      '';
+    }
+    // (builtins.listToAttrs hydraScriptsEnvVars));
+
+  blockfrost-sdk-bridge = craneLib.buildPackage (commonArgs
+    // {
+      inherit cargoArtifacts GIT_REVISION;
+      pname = sdkBridgeCargoToml.package.name;
+      doCheck = false; # we run Windows tests on real Windows on GHA
+      cargoExtraArgs = "--package blockfrost-sdk-bridge";
+      postPatch = ''
+        find -name 'Cargo.toml' | while IFS= read -r cargo_toml ; do
+          sed -r '/^build = .*/d' -i "$cargo_toml"
+        done
+        find -name 'build.rs' -delete
       '';
     });
 
@@ -57,11 +115,9 @@ in rec {
   in
     pkgs.fetchzip {
       name = "testgen-hs-${version}";
-      url = "https://github.com/input-output-hk/testgen-hs/releases/download/${version}/testgen-hs-${version}-${targetSystem}.zip";
-      hash = "sha256-a5/S7hQw5tIupJFbPG/5Pgb6l9Bw5nJX+jvt2WOqML0=";
+      url = "https://github.com/blockfrost/testgen-hs/releases/download/${version}/testgen-hs-${version}-${targetSystem}.zip";
+      hash = "sha256-LXE1RBKgal1Twh7j2hpCfNLsBMEcqSwGHb4bj/Imd9Q=";
     };
-
-  nsis = import ./windows-nsis.nix {nsisNixpkgs = inputs.nixpkgs-nsis;};
 
   nsis-plugins = {
     EnVar = pkgs.fetchzip {
@@ -72,11 +128,13 @@ in rec {
   };
 
   uninstaller =
-    pkgs.runCommandNoCC "uninstaller" {
-      buildInputs = [nsis pkgs.wine];
-      projectName = package.pname;
-      projectVersion = package.version;
+    pkgs.runCommand "uninstaller"
+    {
+      buildInputs = [pkgs.nsis pkgs.wine];
+      projectName = blockfrost-platform.pname;
+      projectVersion = blockfrost-platform.version;
       WINEDEBUG = "-all"; # comment out to get normal output (err,fixme), or set to +all for a flood
+      WINEDLLOVERRIDES = "mscoree,mshtml="; # don't ask about Mono or Gecko
     } ''
       mkdir home
       export HOME=$(realpath home)
@@ -88,46 +146,115 @@ in rec {
       mv $HOME/.wine/drive_c/uninstall.exe $out/uninstall.exe
     '';
 
-  installer =
-    pkgs.runCommandNoCC "installer" {
-      buildInputs = [nsis pkgs.wine];
-      projectName = package.pname;
-      projectVersion = package.version;
-      installerIconPath = "icon.ico";
-      lockfileName = "lockfile";
-      outFileName = "${package.pname}-${package.version}-${inputs.self.shortRev or "dirty"}-${targetSystem}.exe";
-    } ''
-      mkdir home
-      export HOME=$(realpath home)
-      substituteAll ${./windows-installer.nsi} installer.nsi
-      cp -r ${bundle} contents
-      chmod -R +w contents
-      ln -s ${nsis-plugins.EnVar}/Plugins/x86-unicode EnVar
-      cp ${uninstaller}/uninstall.exe contents/
-      cp ${icon} icon.ico
-      makensis installer.nsi -V4
-      mkdir $out
-      mv "$outFileName" $out/
+  make-signed-installer = make-installer {doSign = true;};
+
+  installer = unsigned-installer;
+
+  unsigned-installer = pkgs.stdenv.mkDerivation {
+    name = "unsigned-installer";
+    dontUnpack = true;
+    buildPhase = ''
+      ${make-installer {doSign = false;}}/bin/* | tee make-installer.log
+    '';
+    installPhase = ''
+      mkdir -p $out
+      cp $(tail -n 1 make-installer.log) $out/
 
       # Make it downloadable from Hydra:
       mkdir -p $out/nix-support
-      echo "file binary-dist \"$out/$outFileName\"" >$out/nix-support/hydra-build-products
+      echo "file binary-dist \"$(echo $out/*.exe)\"" >$out/nix-support/hydra-build-products
+    '';
+  };
+
+  make-installer = {doSign ? false}: let
+    outFileName = "${blockfrost-platform.pname}-${blockfrost-platform.version}-${inputs.self.shortRev or "dirty"}-${targetSystem}.exe";
+    installer-nsi =
+      pkgs.runCommand "installer.nsi"
+      {
+        inherit outFileName;
+        projectName = blockfrost-platform.pname;
+        projectVersion = blockfrost-platform.version;
+        installerIconPath = "icon.ico";
+        lockfileName = "lockfile";
+      } ''
+        substituteAll ${./windows-installer.nsi} $out
+      '';
+  in
+    pkgs.writeShellApplication {
+      name = "pack-and-sign";
+      runtimeInputs = with pkgs; [bash coreutils pkgs.nsis];
+      runtimeEnv = {
+        inherit outFileName;
+      };
+      text = ''
+        set -euo pipefail
+        workDir=$(mktemp -d)
+        cd "$workDir"
+
+        ${
+          if doSign
+          then ''
+            sign_cmd() {
+              echo "Signing: ‘$1’…"
+              ssh HSM <"$1" >"$1".signed
+              mv "$1".signed "$1"
+            }
+          ''
+          else ''
+            sign_cmd() {
+              echo "Would sign: ‘$1’"
+            }
+          ''
+        }
+
+        cp ${installer-nsi} installer.nsi
+        cp -r ${bundle} contents
+        chmod -R +w contents
+        ln -s ${nsis-plugins.EnVar}/Plugins/x86-unicode EnVar
+        cp ${uninstaller}/uninstall.exe contents/
+        cp ${icon} icon.ico
+
+        chmod -R +w contents
+        find contents '(' -iname '*.exe' -o -iname '*.dll' ')' | sort | while IFS= read -r binary_to_sign ; do
+          sign_cmd "$binary_to_sign"
+        done
+
+        makensis installer.nsi -V4
+
+        sign_cmd "$outFileName"
+
+        echo
+        echo "Done, you can upload it to GitHub releases:"
+        echo "$workDir"/"$outFileName"
+      '';
+    };
+
+  # XXX: there’s no Hydra build for Windows currently, as `hydra-cluster`
+  # depends on the `unix` package, see <https://github.com/cardano-scaling/hydra/issues/2360>.
+  bundle =
+    pkgs.runCommand "bundle" {
+      # `wineWow64Packages` runs both 32- and 64-bit executables.
+      buildInputs = [pkgs.wineWow64Packages.stable];
+      WINEDEBUG = "-all";
+      WINEDLLOVERRIDES = "mscoree,mshtml="; # don't ask about Mono or Gecko
+    } ''
+      mkdir home
+      export HOME=$(realpath home)
+      mkdir -p $out
+      cp -r ${packageWithIcon}/. $out/.
+      cp -r ${dolos}/bin/. $out/.
+      wine $out/${packageName.pname}.exe --version
     '';
 
-  bundle = pkgs.runCommandNoCC "bundle" {} ''
-    mkdir -p $out
-    cp -r ${testgen-hs}/. $out/testgen-hs
-    cp -r ${packageWithIcon}/. $out/.
-  '';
-
   archive =
-    pkgs.runCommandNoCC "archive" {
+    pkgs.runCommand "archive"
+    {
       buildInputs = with pkgs; [zip];
-      outFileName = "${package.pname}-${package.version}-${inputs.self.shortRev or "dirty"}-${targetSystem}.zip";
+      outFileName = "${blockfrost-platform.pname}-${blockfrost-platform.version}-${inputs.self.shortRev or "dirty"}-${targetSystem}.zip";
     } ''
-      cp -r ${bundle} blockfrost-platform
+      cp -r ${bundle} ${packageName.pname}
       mkdir -p $out
-      zip -q -r $out/$outFileName blockfrost-platform/
+      zip -q -r $out/$outFileName ${packageName.pname}/
 
       # Make it downloadable from Hydra:
       mkdir -p $out/nix-support
@@ -138,11 +265,12 @@ in rec {
     sizes = [16 24 32 48 64 128 256 512];
     d2s = d: "${toString d}x${toString d}";
   in
-    pkgs.runCommand "${baseNameOf source}.ico" {
+    pkgs.runCommand "${baseNameOf source}.ico"
+    {
       buildInputs = with pkgs; [imagemagick];
     } ''
       ${lib.concatMapStringsSep "\n" (dim: ''
-          magick -background none -size ${d2s dim} ${source} ${d2s dim}.png
+          magick -background none ${source} -resize ${d2s dim} ${d2s dim}.png
         '')
         sizes}
       magick ${lib.concatMapStringsSep " " (dim: "${d2s dim}.png") sizes} $out
@@ -153,18 +281,51 @@ in rec {
   resource-hacker = pkgs.fetchzip {
     name = "resource-hacker-5.1.7";
     url = "http://www.angusj.com/resourcehacker/resource_hacker.zip";
-    hash = "sha256-W5TmyjNNXE3nvn37XYbTM+DBeupPijE4M70LJVKJupU=";
+    hash = "sha256-PUY1e5DtfqYiwcYol+JTkCXu5Al++WQONnTFxcN6Ass=";
     stripRoot = false;
   };
 
+  dolos = craneLib.buildPackage {
+    src = inputs.dolos;
+    GIT_REVISION = inputs.dolos.rev;
+    strictDeps = true;
+
+    CARGO_BUILD_TARGET = "x86_64-pc-windows-gnu";
+    TARGET_CC = "${pkgsCross.stdenv.cc}/bin/${pkgsCross.stdenv.cc.targetPrefix}cc";
+
+    TESTGEN_HS_PATH = "unused"; # Don’t try to download it in `build.rs`.
+
+    OPENSSL_DIR = "${pkgs.openssl.dev}";
+    OPENSSL_LIB_DIR = "${pkgs.openssl.out}/lib";
+    OPENSSL_INCLUDE_DIR = "${pkgs.openssl.dev}/include/";
+
+    # Dolos v1.4.0 still has trailing semicolons in tail-position macro calls
+    # (e.g. `bail!(…)` in `src/bin/dolos/data/stats.rs`), which recent Rust
+    # rejects as a hard error
+    # (<https://github.com/rust-lang/rust/issues/79813>). Temporarily downgrade
+    # it back to a warning so this third-party source keeps compiling.
+    #
+    # FIXME: remove after Dolos v1.5.0
+    RUSTFLAGS = "--allow=semicolon_in_expressions_from_macros";
+
+    depsBuildBuild = [
+      pkgsCross.stdenv.cc
+      pthreads
+    ];
+
+    doCheck = false; # we run Windows tests on real Windows on GHA
+  };
+
   packageWithIcon =
-    pkgs.runCommand package.name {
+    pkgs.runCommand blockfrost-platform.name
+    {
       buildInputs = with pkgs; [
         wine
         winetricks
         samba # samba is for bin/ntlm_auth
       ];
       WINEDEBUG = "-all"; # comment out to get normal output (err,fixme), or set to +all for a flood
+      WINEDLLOVERRIDES = "mscoree,mshtml="; # don't ask about Mono or Gecko
     } ''
       export HOME=$(realpath $NIX_BUILD_TOP/home)
       mkdir -p $HOME
@@ -175,7 +336,7 @@ in rec {
         set +e
         wine ${resource-hacker}/ResourceHacker.exe \
           -log res-hack.log \
-          -open "$(winepath -w ${package}/bin/*.exe)" \
+          -open "$(winepath -w ${blockfrost-platform}/bin/*.exe)" \
           -save with-icon.exe \
           -action addoverwrite \
           -res "$(winepath -w ${icon})" \
@@ -189,6 +350,6 @@ in rec {
         fi
       ''}
       mkdir -p $out
-      mv with-icon.exe $out/blockfrost-platform.exe
+      mv with-icon.exe $out/${packageName.pname}.exe
     '';
 }

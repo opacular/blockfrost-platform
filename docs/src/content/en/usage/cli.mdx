@@ -1,0 +1,22 @@
+import { Callout, Table } from "nextra/components";
+
+# Running the platform from the command line
+
+If you have used the configuration wizard to create your config file, all you need to do is run the binary:
+
+```console
+blockfrost-platform
+```
+
+If you are not using the configuration file, simply run as:
+
+```console
+blockfrost-platform [OPTIONS] --node-socket-path <CARDANO_NODE_SOCKET_PATH> \
+                              --secret <SECRET> \
+                              --reward-address <REWARD_ADDRESS>
+```
+
+<Callout>
+  For the full list of the command line options, run `blockfrost-platform
+  --help`.
+</Callout>

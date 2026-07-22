@@ -1,0 +1,46 @@
+[server]
+address = '0.0.0.0:3001'
+log_level = 'info'
+# If unset, we fall back to the `Host:` header
+#url = 'http://127.0.0.1:3001'
+# HA: base URLs of all gateway peers to advertise to platforms.
+# Platforms will open a WebSocket connection to each of these.
+# When unset, falls back to `url` above (or the `Host:` header).
+#peer_urls = ['http://127.0.0.1:3001', 'http://127.0.0.1:3002']
+# Shared secret for stateless keyed-hash access tokens.
+# All gateway instances must share the same secret.
+peer_secret = 'change-me-to-a-long-random-string'
+#peer_secret_file = '/run/keys/blockfrost-gateway-peer-secret'
+
+[database]
+connection_string = 'postgresql://user:pass@host:port/db'
+#connection_string_file = '/run/keys/blockfrost-gateway-db-connection-string'
+# Maximum PostgreSQL connections held by this gateway. The sum across all
+# gateway instances must stay below the database connection limit (minus any
+# slots reserved for superusers).
+pool_max_size = 6
+
+[blockfrost]
+project_id = 'preview_BLOCKFROST_PROJECT_ID'
+#project_id_file = '/run/keys/blockfrost-gateway-project-id'
+nft_asset = '4213fc3eac8c781ac85514dd1de9aaabcd5a3a81cc2df4f413b9b295'
+
+# Hydra disabled by default in dev — both sections are optional, so leaving
+# them commented out skips the Hydra subsystem (no signing key / Blockfrost
+# needed to boot). Uncomment and fill in `cardano_signing_key` +
+# `[blockfrost].project_id` to enable.
+#[hydra_platform]
+#max_concurrent_hydra_nodes = 2
+#cardano_signing_key = "./hydra-config/preview/_our-keys/payment/payment.sk"
+#commit_ada = 3.0
+#lovelace_per_request = 100_000
+#requests_per_microtransaction = 10
+#microtransactions_per_fanout = 2
+
+#[hydra_bridge]
+#max_concurrent_hydra_nodes = 2
+#cardano_signing_key = "./hydra-config/preview/_our-keys/payment/payment.sk"
+#commit_ada = 4.0
+#lovelace_per_request = 100_000
+#requests_per_microtransaction = 10
+#microtransactions_per_fanout = 3

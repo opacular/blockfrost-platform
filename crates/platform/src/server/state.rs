@@ -1,0 +1,33 @@
+use crate::config::Config;
+use axum::extract::State;
+use bf_common::errors::BlockfrostError;
+use bf_data_node::client::DataNode;
+use std::sync::Arc;
+
+#[derive(Clone)]
+pub struct AppState {
+    pub config: Arc<Config>,
+    pub data_node: Option<DataNode>,
+}
+
+impl AppState {
+    pub fn data_node(&self) -> Result<&DataNode, BlockfrostError> {
+        self.data_node.as_ref().ok_or_else(|| {
+            BlockfrostError::internal_server_error("Data node is not configured".to_string())
+        })
+    }
+}
+
+pub type AppStateExt = State<AppState>;
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ApiPrefix(pub Option<uuid::Uuid>);
+
+impl std::fmt::Display for ApiPrefix {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.0 {
+            Some(u) => write!(f, "/{u}"),
+            None => write!(f, "/"),
+        }
+    }
+}

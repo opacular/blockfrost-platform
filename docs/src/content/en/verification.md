@@ -1,0 +1,164 @@
+# Verifying that you are up and running
+
+## Prerequisites verification
+
+Before verifying your Blockfrost platform operation, make sure that these critical configurations are correct:
+
+### A running Cardano node
+
+A running mainnet (production) instance of cardano-node reachable by the platform via a local Unix socket.
+
+### NFT address configuration
+
+**Important:** You must use the exact address containing your Icebreaker NFT, not your general wallet address.
+
+When running the init command or configuring manually, use the specific address containing the NFT:
+
+```shell
+--reward-address addr1xxx...  # Address containing NFT, not general wallet address
+```
+
+Your wallet likely contains multiple addresses.
+The platform requires specifically the address where the NFT resides.
+Check your wallet to identify which address holds the Icebreaker NFT.
+
+### Network connectivity
+
+The platform connects **outbound** to the Blockfrost load balancers over WebSocket, so no inbound port needs to be opened for Blockfrost.
+Make sure outbound Internet connectivity is allowed.
+The default local Blockfrost platform port is `3000`; you only need to reach it if you scrape the Prometheus metrics endpoint yourself.
+
+#### For cloud hosting
+
+- Azure: Ensure outbound rules permit HTTPS/WebSocket traffic to the Internet
+
+- AWS: Ensure security groups permit outbound HTTPS/WebSocket traffic
+
+- Other providers: Confirm firewall settings allow outbound connections.
+
+## Basic service verification
+
+After confirming prerequisites, verify the service itself:
+
+### Installation verification
+
+Confirm that the software is properly installed:
+
+```shell
+blockfrost-platform --version
+```
+
+This should return the current version number.
+
+### Service startup verification
+
+Start the service and check for successful initialization:
+
+```shell
+blockfrost-platform --node-socket-path /path/to/node.socket \
+                    --secret your_icebreaker_secret \
+                    --reward-address your_nft_address
+```
+
+In the logs, you should see initialization messages.
+The message `DEBUG: Decoding done` indicates normal operation.
+
+If you don't see this message or encounter errors, check:
+
+- Node socket path accessibility
+- Secret key validity.
+
+### Operational verification
+
+Once the service is running, verify that it is functioning correctly:
+
+### Understanding the UUID
+
+When running in non-solitary mode, the Blockfrost platform generates a new UUID each time it starts.
+This UUID is used as a prefix for routing requests through the Icebreakers load balancers.
+
+### Example log entry showing UUID
+
+```
+INFO: Your instance ID: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+```
+
+You would need this UUID for things like your own manual transaction submission tests.
+Otherwise, it's an implementation detail.
+In solitary mode, no UUID is generated.
+Remember that this changes every time you restart the service.
+
+### Metrics endpoint verification
+
+Check if your service is properly reporting metrics:
+
+```shell
+wget http://your-server-ip:3000/metrics
+```
+
+If functioning properly, this endpoint provides:
+
+- API calls served count
+- Resource utilization statistics
+- Uptime information.
+
+Note: The metrics endpoint may require the latest binary.
+If you receive a 500 error, update your installation.
+
+### Health endpoint verification
+
+Check if your service is up and running by calling the health endpoint:
+
+```shell
+wget http://your-server-ip:3000/
+```
+
+If working properly, this endpoint will return JSON with service status details such as:
+
+- Application name
+- Current release version
+- Revision (Git commit hash)
+- Boolean indicating overall health (`healthy`)
+- Block, epoch, era, slot, and sync progress info
+- Array listing any issues detected
+
+If `healthy` is true, the service is operational.
+If you get a 503 error or if `healthy` is false, check your logs or update your installation to resolve potential issues.
+
+## Icebreaker dashboard monitoring
+
+For a visual verification of your node's status, access the Icebreaker dashboard at [https://icebreakers.blockfrost.io/](https://icebreakers.blockfrost.io/)
+
+Your node will appear as 'Icebreaker X' where X is your assigned number (visible in your NFT metadata).
+
+This dashboard provides:
+
+- Connection status
+- Performance metrics
+- Comparison with other Icebreaker nodes.
+
+## Troubleshooting common issues
+
+If verification fails, check these common issues:
+
+### Not seeing 'Decoding done' message
+
+- Ensure your Cardano node is fully synced
+- Check node socket path accessibility.
+
+### Cannot access metrics endpoint
+
+- Confirm port 3000 is accessible from your network
+- Make sure metrics are not disabled (`--no-metrics` flag or config).
+
+### Receiving 503 errors under load
+
+- The server has a concurrency limit (default: 8192 concurrent requests). If exceeded, additional requests receive a 503 response.
+- Increase the limit with `--server-concurrency-limit` if needed.
+
+### Not appearing in Grafana
+
+- Allow up to 10 minutes for your node to appear
+- Verify your NFT address is correctly configured
+- Ensure outbound connections are permitted by your firewall.

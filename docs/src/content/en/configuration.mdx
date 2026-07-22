@@ -1,0 +1,47 @@
+# Configuring the platform
+
+If this is your first time, you can use the `--init` flag to generate your configuration file.
+For example, it can look like the following:
+
+```
+$ blockfrost-platform --init
+> Run in solitary mode? No
+> Enable metrics? Yes
+> Mode? Compact
+> What should be the log level? Info
+> Enter the server IP address: 0.0.0.0
+> Enter the port number: 3000
+> Enter path to Cardano node socket: /home/blockfrost/cardano-node/node.socket
+> Data node URL (empty to skip): http://localhost:3010
+> Data node timeout (s): 30
+> Enter the reward address: addr1qyppgpfznd04jxfmc7mq53nt8pjayjzv854xw2usavwgsrzegm73yx3pu8q4egayq3l5lz8suwylrq4t4y4tc6qlv6tqrvq6qw
+> Enter the icebreakers secret: 1234567890
+
+Config has been written to "/home/blockfrost/.config/blockfrost-platform/config.toml"
+```
+
+Unless you know what you are doing, we recommend that you keep the default settings.
+However, the Cardano node socket, the reward address, and the secret will be unique to your specific setup.
+
+The configuration file location depends on your operating system:
+
+- Linux: `~/.config/blockfrost-platform/config.toml`
+- macOS: `~/Library/Application Support/blockfrost-platform/config.toml`
+
+## Environment variables
+
+All CLI options can also be set via environment variables using the `BLOCKFROST_` prefix. For example:
+
+```bash
+BLOCKFROST_NODE_SOCKET_PATH=/path/to/node.socket
+BLOCKFROST_SECRET=my_secret
+BLOCKFROST_REWARD_ADDRESS=addr1...
+BLOCKFROST_LOG_LEVEL=debug
+BLOCKFROST_DATA_NODE=http://localhost:3010
+```
+
+The configuration priority is (highest to lowest):
+
+1. CLI arguments
+2. Environment variables (`BLOCKFROST_` prefix)
+3. Configuration file (TOML)

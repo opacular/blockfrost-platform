@@ -1,19 +1,26 @@
 import nextra from "nextra";
+import remarkPrefixLocaleLinks from "./remark-prefix-locale-links.mjs";
 
-/**
- * @type {import('next').NextConfig}
- */
-const nextConfig = {
-  output: "export",
-  images: {
-    unoptimized: true, // mandatory, otherwise won't export
-  },
-  // Optional: Change the output directory `out` -> `dist`
-  // distDir: "build"
-};
 const withNextra = nextra({
-  theme: "nextra-theme-docs",
-  themeConfig: "./theme.config.tsx",
+  latex: true,
+  search: {
+    codeblocks: false,
+  },
+  contentDirBasePath: "/",
+  mdxOptions: {
+    remarkPlugins: [remarkPrefixLocaleLinks],
+  },
 });
 
-export default withNextra(nextConfig);
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
+
+export default withNextra({
+  reactStrictMode: true,
+  output: "export",
+  ...(basePath && { basePath }),
+  images: { unoptimized: true },
+  i18n: {
+    locales: ["en", "ja"],
+    defaultLocale: "en",
+  },
+});

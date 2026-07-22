@@ -1,0 +1,94 @@
+use axum::response::{IntoResponse, Response};
+use axum::{Json, http};
+use http::StatusCode;
+use serde::{Deserialize, Serialize};
+use thiserror::Error;
+use tracing::{error, warn};
+
+#[derive(Serialize, Deserialize)]
+pub struct ApiError {
+    status: String,
+    reason: String,
+    details: String,
+}
+
+#[derive(Error, Debug)]
+pub enum APIError {
+    #[error("Validation error: {0}")]
+    Validation(String),
+
+    #[error("License error: {0}")]
+    License(String),
+
+    #[error("Unauthorized registration access")]
+    Unauthorized(),
+
+    #[error("Rate limited")]
+    RateLimited(),
+
+    #[error("Database connection error: {0}")]
+    DatabaseConnection(#[from] deadpool_diesel::PoolError),
+
+    #[error("Database interaction error: {0}")]
+    DatabaseInteraction(#[from] deadpool_diesel::InteractError),
+
+    #[error("Database query error: {0}")]
+    DatabaseQuery(#[from] diesel::result::Error),
+}
+
+impl IntoResponse for APIError {
+    fn into_response(self) -> Response {
+        let (status_code, error_response) = match &self {
+            APIError::Validation(_) => (
+                StatusCode::BAD_REQUEST,
+                ApiError {
+                    status: "failed".to_string(),
+                    reason: "Provided fields are not valid".to_string(),
+                    details: self.to_string(),
+                },
+            ),
+            APIError::License(address) => (
+                StatusCode::FORBIDDEN,
+                ApiError {
+                    status: "failed".to_string(),
+                    reason: "no_license".to_string(),
+                    details: format!("Address: {address} does not contain the license."),
+                },
+            ),
+            APIError::Unauthorized() => (
+                StatusCode::FORBIDDEN,
+                ApiError {
+                    status: "failed".to_string(),
+                    reason: "unauthorized".to_string(),
+                    details: "You are not authorized to access the registration.".to_string(),
+                },
+            ),
+            APIError::RateLimited() => (
+                StatusCode::TOO_MANY_REQUESTS,
+                ApiError {
+                    status: "failed".to_string(),
+                    reason: "rate_limited".to_string(),
+                    details: "Too many registration requests. Please try again later.".to_string(),
+                },
+            ),
+            APIError::DatabaseConnection(_)
+            | APIError::DatabaseQuery(_)
+            | APIError::DatabaseInteraction(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                ApiError {
+                    status: "failed".to_string(),
+                    reason: "Database error".to_string(),
+                    details: "An error occurred while accessing the database.".to_string(),
+                },
+            ),
+        };
+
+        if status_code.is_server_error() {
+            error!("API Error occurred: {}", self);
+        } else {
+            warn!("API Error occurred: {}", self);
+        }
+
+        (status_code, Json(error_response)).into_response()
+    }
+}

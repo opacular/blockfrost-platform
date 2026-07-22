@@ -1,0 +1,16 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "pnpm build",
+  "rewrites": [
+    {
+      "source": "/next",
+      "has": [{ "type": "host", "value": "platform.blockfrost.io" }],
+      "destination": "https://blockfrost-platform-docs-next.vercel.app/next"
+    },
+    {
+      "source": "/next/:path+",
+      "has": [{ "type": "host", "value": "platform.blockfrost.io" }],
+      "destination": "https://blockfrost-platform-docs-next.vercel.app/next/:path+"
+    }
+  ]
+}

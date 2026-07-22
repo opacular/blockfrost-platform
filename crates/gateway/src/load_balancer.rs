@@ -1,0 +1,1691 @@
+use crate::errors::APIError;
+use crate::hydra_server_platform;
+use crate::types::AssetName;
+use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, HashMap};
+use std::sync::{Arc, atomic};
+use tokio::sync::{Mutex, mpsc, oneshot};
+use tokio::task::JoinHandle;
+use tokio_util::sync::CancellationToken;
+use tracing::{error, info, warn};
+use uuid::Uuid;
+
+const ACCESS_TOKEN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5 * 60);
+const MAX_BODY_BYTES: usize = bf_common::DEFAULT_MAX_BODY_BYTES;
+const REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
+const WS_PING_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
+const HEALTH_CHECK_INTERVAL: std::time::Duration = std::time::Duration::from_secs(30);
+const HEALTH_CHECK_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct AccessToken(pub String);
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct RequestId(Uuid);
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct JsonRequest {
+    pub id: RequestId,
+    method: JsonRequestMethod,
+    path: String,
+    query: Option<String>,
+    pub header: Vec<JsonHeader>,
+    body_base64: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct JsonResponse {
+    pub id: RequestId,
+    pub code: u16,
+    pub header: Vec<JsonHeader>,
+    pub body_base64: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct JsonHeader {
+    name: String,
+    value: String,
+}
+
+#[allow(clippy::upper_case_acronyms)]
+#[derive(Serialize, Deserialize, Debug)]
+pub enum JsonRequestMethod {
+    GET,
+    POST,
+}
+
+/// The WebSocket messages that we send.
+#[derive(Serialize, Deserialize, Debug)]
+pub enum LoadBalancerMessage {
+    Request(JsonRequest),
+    HydraKExResponse(hydra_server_platform::KeyExchangeResponse),
+    HydraTunnel(bf_common::tcp_mux_tunnel::TunnelMsg),
+    Ping(u64),
+    Pong(u64),
+    Error { code: u64, msg: String },
+}
+
+/// The WebSocket messages that we receive.
+#[derive(Serialize, Deserialize, Debug)]
+pub enum RelayMessage {
+    Response(JsonResponse),
+    HydraKExRequest(hydra_server_platform::KeyExchangeRequest),
+    HydraTunnel(bf_common::tcp_mux_tunnel::TunnelMsg),
+    Ping(u64),
+    Pong(u64),
+}
+
+#[derive(Clone, Debug)]
+pub struct LoadBalancerState {
+    pub active_relays: Arc<Mutex<BTreeMap<Uuid, RelayState>>>,
+    pub any_relay_cursor: Arc<atomic::AtomicU64>,
+    pub hydras: Option<hydra_server_platform::HydrasManager>,
+    /// 32-byte key for stateless keyed-hash tokens.
+    peer_secret: [u8; 32],
+}
+
+#[derive(Debug)]
+pub struct AccessTokenState {
+    pub name: AssetName,
+    pub reward_addr: String,
+    pub api_prefix: Uuid,
+}
+
+#[derive(Clone, Debug)]
+pub struct RelayState {
+    pub name: AssetName,
+    pub new_request_channel: mpsc::Sender<RequestState>,
+    /// Send this to end the event loop of the connection, and disconnect the
+    /// relay, with the [`String`] as the reason. It’s a little controversial
+    /// for this to be an MPSC, but also the cleanest. You can’t clone [`oneshot`].
+    pub do_finish: mpsc::Sender<String>,
+    pub requests_in_progress: Arc<Mutex<HashMap<RequestId, RequestState>>>,
+    pub network_rtt: Arc<Mutex<Option<std::time::Duration>>>,
+    pub connected_since: std::time::Instant,
+    pub requests_sent: Arc<atomic::AtomicU64>,
+    pub responses_received: Arc<atomic::AtomicU64>,
+    /// Result of the latest periodic `GET /` check of this relay’s Platform,
+    /// `None` until the first check completes.
+    pub platform_health: Arc<Mutex<Option<PlatformHealth>>>,
+}
+
+#[derive(Clone, Debug)]
+pub struct PlatformHealth {
+    pub healthy: bool,
+    pub version: Option<String>,
+    pub has_data_node: Option<bool>,
+}
+
+impl PlatformHealth {
+    fn unreachable() -> Self {
+        PlatformHealth {
+            healthy: false,
+            version: None,
+            has_data_node: None,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct RequestState {
+    respond_to: oneshot::Sender<JsonResponse>,
+    expires: std::time::Instant,
+    underlying: JsonRequest,
+    is_health_check: bool,
+}
+
+impl LoadBalancerState {
+    pub fn new(
+        hydras: Option<hydra_server_platform::HydrasManager>,
+        peer_secret: [u8; 32],
+    ) -> LoadBalancerState {
+        let active_relays = Arc::new(Mutex::new(BTreeMap::new()));
+        let any_relay_cursor = Arc::new(atomic::AtomicU64::new(0));
+
+        LoadBalancerState {
+            active_relays,
+            any_relay_cursor,
+            hydras,
+            peer_secret,
+        }
+    }
+
+    async fn relay_for_prefix(
+        &self,
+        api_prefix: Uuid,
+        rest: &str,
+    ) -> Result<(mpsc::Sender<RequestState>, AssetName), (hyper::StatusCode, String)> {
+        self.active_relays
+            .lock()
+            .await
+            .get(&api_prefix)
+            .ok_or_else(|| {
+                (
+                    hyper::StatusCode::NOT_FOUND,
+                    format!("relay {api_prefix} not found for request: {rest}"),
+                )
+            })
+            .map(|rs| (rs.new_request_channel.clone(), rs.name.clone()))
+    }
+
+    async fn relay_for_any(
+        &self,
+        rest: &str,
+    ) -> Result<(mpsc::Sender<RequestState>, AssetName), (hyper::StatusCode, String)> {
+        let active_relays = self.active_relays.lock().await;
+        let n = active_relays.len();
+
+        if n == 0 {
+            return Err((
+                hyper::StatusCode::NOT_FOUND,
+                format!("no relays connected for request: {rest}"),
+            ));
+        }
+
+        let request_count = self
+            .any_relay_cursor
+            .fetch_add(1, atomic::Ordering::Relaxed);
+        let idx = (request_count % n as u64) as usize;
+
+        // `BTreeMap` keys are already sorted, so `nth(idx)` gives us a
+        // deterministic round-robin order:
+        let api_prefix = *active_relays
+            .keys()
+            .nth(idx)
+            .expect("non-empty relay map must yield a key");
+
+        Ok(active_relays
+            .get(&api_prefix)
+            .map(|rs| (rs.new_request_channel.clone(), rs.name.clone()))
+            .expect("selected relay must exist in active_relays"))
+    }
+
+    /// Create a stateless token: `base64url(payload) + "." + hex(blake3_keyed_hash)`.
+    pub fn new_access_token(
+        &self,
+        name: AssetName,
+        api_prefix: Uuid,
+        reward_addr: &str,
+    ) -> AccessToken {
+        use base64::{Engine as _, engine::general_purpose};
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let expires = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock before UNIX epoch")
+            .as_secs()
+            + ACCESS_TOKEN_TIMEOUT.as_secs();
+
+        let payload = KeyedTokenPayload {
+            api_prefix,
+            asset_name: name.0,
+            reward_addr: reward_addr.to_string(),
+            expires,
+        };
+        let payload_json =
+            serde_json::to_string(&payload).expect("KeyedTokenPayload is serializable");
+        let payload_b64 = general_purpose::URL_SAFE_NO_PAD.encode(payload_json.as_bytes());
+        let hash = blake3::keyed_hash(&self.peer_secret, payload_b64.as_bytes());
+        AccessToken(format!("{payload_b64}.{}", hash.to_hex()))
+    }
+
+    /// Verify a keyed token and reconstruct [`AccessTokenState`].
+    pub fn register(&self, token: &str) -> Result<AccessTokenState, APIError> {
+        use base64::{Engine as _, engine::general_purpose};
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let (payload_b64, hash_hex) = token.split_once('.').ok_or(APIError::Unauthorized())?;
+
+        // Verify the keyed hash (`blake3::Hash::eq` is constant-time).
+        let expected = blake3::keyed_hash(&self.peer_secret, payload_b64.as_bytes());
+        let provided = blake3::Hash::from_hex(hash_hex).map_err(|_| APIError::Unauthorized())?;
+        if expected != provided {
+            return Err(APIError::Unauthorized());
+        }
+
+        // Decode & deserialize the payload.
+        let payload_json = general_purpose::URL_SAFE_NO_PAD
+            .decode(payload_b64)
+            .map_err(|_| APIError::Unauthorized())?;
+        let payload: KeyedTokenPayload =
+            serde_json::from_slice(&payload_json).map_err(|_| APIError::Unauthorized())?;
+
+        // Check expiry.
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock before UNIX epoch")
+            .as_secs();
+        if payload.expires < now {
+            return Err(APIError::Unauthorized());
+        }
+
+        Ok(AccessTokenState {
+            name: AssetName(payload.asset_name),
+            reward_addr: payload.reward_addr,
+            api_prefix: payload.api_prefix,
+        })
+    }
+}
+
+/// Payload encoded inside a stateless keyed token.
+#[derive(Serialize, Deserialize)]
+struct KeyedTokenPayload {
+    #[serde(rename = "p")]
+    api_prefix: Uuid,
+    #[serde(rename = "n")]
+    asset_name: String,
+    #[serde(rename = "r")]
+    reward_addr: String,
+    /// Expiry as seconds since the UNIX epoch.
+    #[serde(rename = "e")]
+    expires: u64,
+}
+
+/// The HTTP (incl. WebSocket) endpoints that the load balancer exposes.
+pub mod api {
+    use super::*;
+    use crate::errors::APIError;
+    use axum::{
+        Extension,
+        extract::{Path, Request, WebSocketUpgrade},
+        http::{HeaderMap, StatusCode},
+        response::IntoResponse,
+    };
+    use tokio::sync::oneshot;
+    use uuid::Uuid;
+
+    /// The main WebSocker route that will be upgraded to a proper WebSocket
+    /// connection by capable clients.
+    pub async fn websocket_route(
+        ws: WebSocketUpgrade,
+        Extension(load_balancer): Extension<LoadBalancerState>,
+        headers: HeaderMap,
+    ) -> Result<impl IntoResponse, APIError> {
+        let token: String = headers
+            .get("Authorization")
+            .and_then(|a| a.to_str().ok())
+            .and_then(|a| a.strip_prefix("Bearer "))
+            .ok_or(APIError::Unauthorized())?
+            .to_string();
+        let token_state = load_balancer.register(&token)?;
+        Ok(ws.on_upgrade(|socket| event_loop::run(load_balancer, token_state, socket)))
+    }
+
+    /// Axum noise, a proxy to `handle_prefix_route`.
+    pub async fn prefix_route_root(
+        Path(uuid): Path<String>,
+        Extension(load_balancer): Extension<LoadBalancerState>,
+        req: Request,
+    ) -> Result<impl IntoResponse, APIError> {
+        handle_prefix_route(load_balancer, uuid, "/".to_string(), req).await
+    }
+
+    /// Axum noise, a proxy to `handle_any_route`.
+    pub async fn any_route_root(
+        Extension(load_balancer): Extension<LoadBalancerState>,
+        req: Request,
+    ) -> Result<impl IntoResponse, APIError> {
+        handle_any_route(load_balancer, "/".to_string(), req).await
+    }
+
+    /// Axum noise, a proxy to `handle_prefix_route`.
+    pub async fn prefix_route(
+        Path((uuid, rest)): Path<(String, String)>,
+        Extension(load_balancer): Extension<LoadBalancerState>,
+        req: Request,
+    ) -> Result<impl IntoResponse, APIError> {
+        handle_prefix_route(load_balancer, uuid, format!("/{rest}"), req).await
+    }
+
+    /// Axum noise, a proxy to `handle_any_route`.
+    pub async fn any_route(
+        Path(rest): Path<String>,
+        Extension(load_balancer): Extension<LoadBalancerState>,
+        req: Request,
+    ) -> Result<impl IntoResponse, APIError> {
+        handle_any_route(load_balancer, format!("/{rest}"), req).await
+    }
+
+    #[derive(Serialize, Deserialize, Debug)]
+    struct RelayStats {
+        api_prefix: Uuid,
+        network_rtt_seconds: Option<f64>,
+        connected_since: chrono::DateTime<chrono::Utc>,
+        requests_sent: u64,
+        responses_received: u64,
+        requests_in_progress: u64,
+        /// `None` until the first periodic health check of the Platform completes.
+        healthy: Option<bool>,
+        version: Option<String>,
+        has_data_node: Option<bool>,
+    }
+
+    /// This route shows some stats about all relays connected with a WebSocket,
+    /// and their RTT (round-trip time).
+    pub async fn stats_route(
+        Extension(load_balancer): Extension<LoadBalancerState>,
+    ) -> impl IntoResponse {
+        let mut rv: HashMap<AssetName, RelayStats> = HashMap::new();
+        let now_chrono = chrono::Utc::now();
+        let now_instant = std::time::Instant::now();
+
+        let snapshot: Vec<(Uuid, RelayState)> = load_balancer
+            .active_relays
+            .lock()
+            .await
+            .iter()
+            .map(|(api_prefix, relay_state)| (*api_prefix, relay_state.clone()))
+            .collect();
+
+        for (api_prefix, relay_state) in &snapshot {
+            let platform_health = relay_state.platform_health.lock().await.clone();
+            rv.insert(
+                relay_state.name.clone(),
+                RelayStats {
+                    api_prefix: *api_prefix,
+                    network_rtt_seconds: relay_state
+                        .network_rtt
+                        .lock()
+                        .await
+                        .map(|a| a.as_secs_f64()),
+                    connected_since: now_chrono - (now_instant - relay_state.connected_since),
+                    requests_sent: relay_state.requests_sent.load(atomic::Ordering::SeqCst),
+                    responses_received: relay_state
+                        .responses_received
+                        .load(atomic::Ordering::SeqCst),
+                    requests_in_progress: relay_state.requests_in_progress.lock().await.len()
+                        as u64,
+                    healthy: platform_health.as_ref().map(|h| h.healthy),
+                    version: platform_health.as_ref().and_then(|h| h.version.clone()),
+                    has_data_node: platform_health.and_then(|h| h.has_data_node),
+                },
+            );
+        }
+
+        axum::Json(rv)
+    }
+
+    /// This route handles requests directed at particular relays. For now, we
+    /// allow end users to specify which relay they want with a UUID prefix.
+    ///
+    /// E.g. `GET /{uuid}/metrics` will be translated to a WebSocket message,
+    /// and handled by the relay identified by said `{uuid}`.
+    async fn handle_prefix_route(
+        load_balancer: LoadBalancerState,
+        uuid: String,
+        rest: String,
+        req: Request,
+    ) -> Result<impl IntoResponse, APIError> {
+        let rv: Result<hyper::Response<axum::body::Body>, (StatusCode, String)> = async move {
+            let api_prefix = Uuid::parse_str(&uuid).map_err(|_| {
+                (
+                    StatusCode::NOT_FOUND,
+                    format!("unparsable UUID prefix: {uuid}"),
+                )
+            })?;
+
+            let (new_request_channel, relay_name) =
+                load_balancer.relay_for_prefix(api_prefix, &rest).await?;
+
+            forward_request(new_request_channel, relay_name, rest, req).await
+        }
+        .await;
+
+        match rv {
+            Ok(resp) => Ok(resp),
+            Err((code, reason)) => {
+                error!("returning {}, because: {}", code, reason);
+                Ok((code, reason).into_response())
+            },
+        }
+    }
+
+    /// This route handles requests directed at any active relay. The relay is
+    /// picked by sorting all connected UUIDs and selecting the next one via a
+    /// shared round-robin counter.
+    async fn handle_any_route(
+        load_balancer: LoadBalancerState,
+        rest: String,
+        req: Request,
+    ) -> Result<impl IntoResponse, APIError> {
+        let rv: Result<hyper::Response<axum::body::Body>, (StatusCode, String)> = async move {
+            let (new_request_channel, relay_name) = load_balancer.relay_for_any(&rest).await?;
+
+            forward_request(new_request_channel, relay_name, rest, req).await
+        }
+        .await;
+
+        match rv {
+            Ok(resp) => Ok(resp),
+            Err((code, reason)) => {
+                error!("returning {}, because: {}", code, reason);
+                Ok((code, reason).into_response())
+            },
+        }
+    }
+
+    async fn forward_request(
+        new_request_channel: mpsc::Sender<RequestState>,
+        relay_name: AssetName,
+        rest: String,
+        req: Request,
+    ) -> Result<hyper::Response<axum::body::Body>, (StatusCode, String)> {
+        let query = req.uri().query().map(ToString::to_string);
+        let json_req = request_to_json(req, rest.clone(), query, &relay_name).await?;
+
+        let (response_tx, response_rx) = oneshot::channel::<JsonResponse>();
+
+        let new_request = RequestState {
+            expires: std::time::Instant::now() + REQUEST_TIMEOUT,
+            respond_to: response_tx,
+            underlying: json_req,
+            is_health_check: false,
+        };
+
+        new_request_channel.send(new_request).await.map_err(|_| {
+            (
+                StatusCode::BAD_GATEWAY,
+                format!(
+                    "receiver {} dropped; request: {}",
+                    relay_name.as_str(),
+                    rest
+                ),
+            )
+        })?;
+
+        match tokio::time::timeout(REQUEST_TIMEOUT, response_rx).await {
+            Ok(Ok(response)) => json_to_response(response, &relay_name).await,
+            Ok(Err(_)) => {
+                // sender dropped
+                Err((
+                    StatusCode::BAD_GATEWAY,
+                    format!(
+                        "relay {} dropped while awaiting response for: {}",
+                        relay_name.as_str(),
+                        rest
+                    ),
+                ))
+            },
+            Err(_) => Err((
+                StatusCode::GATEWAY_TIMEOUT,
+                format!("relay {} timed out for: {}", relay_name.as_str(), rest),
+            )),
+        }
+    }
+}
+
+/// The WebSocket event loop, passing messages between HTTP<->WebSocket, keeping
+/// track of persistent connection liveness, etc.
+pub mod event_loop {
+    use super::*;
+    use axum::extract::ws::{Message, WebSocket};
+    use axum::http::StatusCode;
+
+    /// For clarity, let’s have a single connection 'event_loop per WebSocket
+    /// connection, with the following events:
+    enum LBEvent {
+        NewRequest(RequestState),
+        NewRelayMessage(RelayMessage),
+        PingTick,
+        Finish(String),
+    }
+
+    /// Top-level logic of a single WebSocket connection with a relay.
+    pub async fn run(
+        load_balancer: LoadBalancerState,
+        token_state: AccessTokenState,
+        socket: WebSocket,
+    ) {
+        let asset_name = &token_state.name;
+        let reward_addr = token_state.reward_addr.clone();
+
+        // Allow only 1 connection per NFT:
+        disconnect_existing_sessions_of(&token_state, &load_balancer).await;
+
+        info!("{}: new relay connection", asset_name.as_str());
+
+        let (event_tx, mut event_rx) = mpsc::channel::<LBEvent>(64);
+        let (request_tx, request_task) = wire_requests(event_tx.clone()).await;
+        let (finish_tx, finish_task) = wire_do_finish(event_tx.clone()).await;
+        let (socket_tx, response_task, arbitrary_msg_task) =
+            wire_responses(event_tx.clone(), socket, asset_name).await;
+
+        let relay_state = RelayState {
+            name: token_state.name.clone(),
+            new_request_channel: request_tx,
+            do_finish: finish_tx,
+            requests_in_progress: Arc::new(Mutex::new(HashMap::new())),
+            network_rtt: Arc::new(Mutex::new(None)),
+            connected_since: std::time::Instant::now(),
+            requests_sent: Arc::new(atomic::AtomicU64::new(0)),
+            responses_received: Arc::new(atomic::AtomicU64::new(0)),
+            platform_health: Arc::new(Mutex::new(None)),
+        };
+
+        let clean_up_task = tokio::spawn(clean_up_expired_requests_periodically(
+            relay_state.requests_in_progress.clone(),
+        ));
+
+        let health_check_task = tokio::spawn(check_platform_health_periodically(
+            relay_state.new_request_channel.clone(),
+            relay_state.platform_health.clone(),
+        ));
+
+        load_balancer
+            .active_relays
+            .lock()
+            .await
+            .insert(token_state.api_prefix, relay_state.clone());
+
+        let schedule_ping_tick = {
+            let event_tx = event_tx.clone();
+            move || {
+                let tx = event_tx.clone();
+                tokio::spawn(async move {
+                    tokio::time::sleep(WS_PING_TIMEOUT).await;
+                    let _ignored_failure: Result<_, _> = tx.send(LBEvent::PingTick).await;
+                })
+            }
+        };
+
+        // Schedule the first `PingTick` immediately, otherwise we won’t start
+        // checking for ping timeout, and won’t measure the network RTT:
+        let _ignored_failure: Result<_, _> = event_tx.send(LBEvent::PingTick).await;
+
+        // Event loop state (let’s keep it minimal, please):
+        let mut last_ping_sent_at: Option<std::time::Instant> = None;
+        let mut last_ping_id: u64 = 0;
+        let mut disconnection_reason = None;
+
+        let mut initial_hydra_kex: Option<(
+            hydra_server_platform::KeyExchangeRequest,
+            hydra_server_platform::KeyExchangeResponse,
+        )> = None;
+        let mut hydra_controller: Option<hydra_server_platform::HydraController> = None;
+
+        let mut tunnel_cancellation = CancellationToken::new();
+        let mut tunnel_controller: Option<bf_common::tcp_mux_tunnel::Tunnel> = None;
+
+        // The actual connection event loop:
+        'event_loop: while let Some(msg) = event_rx.recv().await {
+            match msg {
+                LBEvent::Finish(reason) => {
+                    disconnection_reason = Some(reason);
+                    break 'event_loop;
+                },
+
+                LBEvent::NewRequest(request) => {
+                    if pass_on_request(request, &relay_state, asset_name, &socket_tx)
+                        .await
+                        .is_err()
+                    {
+                        break 'event_loop;
+                    }
+                },
+
+                LBEvent::NewRelayMessage(RelayMessage::HydraTunnel(tun_msg)) => {
+                    if let Some(tunnel_ctl) = &tunnel_controller {
+                        match tunnel_ctl.on_msg(tun_msg).await {
+                            Ok(()) => (),
+                            Err(err) => error!(
+                                "hydra-tunnel: got an error when passing message through WebSocket: {err}; ignoring"
+                            ),
+                        }
+                    }
+                },
+
+                LBEvent::NewRelayMessage(RelayMessage::HydraKExRequest(req)) => {
+                    // If there's an existing controller (e.g. the platform's hydra-node
+                    // crashed and restarted), tear it down so the KEx can start fresh.
+                    if let Some(ctl) = hydra_controller.take() {
+                        if ctl.is_alive() {
+                            info!(
+                                "{}: terminating existing Hydra controller for reconnection",
+                                asset_name.as_str()
+                            );
+                            ctl.terminate().await;
+                        }
+                        tunnel_cancellation.cancel();
+                        tunnel_cancellation = CancellationToken::new();
+                        tunnel_controller = None;
+                    }
+
+                    let reply = match (
+                        &load_balancer.hydras,
+                        &req.accepted_platform_h2h_port,
+                        initial_hydra_kex.is_some(),
+                    ) {
+                        (None, _, _) => LoadBalancerMessage::Error {
+                            code: 536,
+                            msg: "Hydra micropayments not supported".to_string(),
+                        },
+                        (Some(hydras), Some(_accepted_port), true) => {
+                            let initial_kex = initial_hydra_kex.clone().unwrap();
+                            let platform_machine_id = req.machine_id.clone();
+                            match hydras
+                                .spawn_new(asset_name, &reward_addr, initial_kex, req)
+                                .await
+                            {
+                                Ok((ctl, resp)) => {
+                                    // Consume the cached KEx only after spawn succeeds:
+                                    initial_hydra_kex = None;
+                                    hydra_controller = Some(ctl);
+
+                                    // Only start the TCP-over-WebSocket tunnels if we’re running
+                                    // on different machines:
+                                    if platform_machine_id != resp.machine_id {
+                                        let (tunnel_ctl, mut tunnel_rx) =
+                                            bf_common::tcp_mux_tunnel::Tunnel::new(
+                                                bf_common::tcp_mux_tunnel::TunnelConfig {
+                                                    expose_port: resp.gateway_h2h_port,
+                                                    id_prefix_bit: true,
+                                                    ..(bf_common::tcp_mux_tunnel::TunnelConfig::default(
+                                                    ))
+                                                },
+                                                tunnel_cancellation.clone(),
+                                            );
+
+                                        // This really shouldn’t fail, unless we hit the
+                                        // TOCTOU race condition (very, very rare):
+                                        if let Err(err) = tunnel_ctl
+                                            .spawn_listener(resp.proposed_platform_h2h_port)
+                                            .await
+                                        {
+                                            error!(
+                                                "hydra-tunnel: failed to bind listener on port {}: {err}",
+                                                resp.proposed_platform_h2h_port
+                                            );
+                                            disconnection_reason = Some(format!(
+                                                "hydra-tunnel: failed to bind listener on port {}: {err}",
+                                                resp.proposed_platform_h2h_port
+                                            ));
+                                            break 'event_loop;
+                                        }
+
+                                        let socket_tx_ = socket_tx.clone();
+                                        let asset_name_ = asset_name.clone();
+                                        tokio::spawn(async move {
+                                            while let Some(tun_msg) = tunnel_rx.recv().await {
+                                                if send_json_msg(
+                                                    &socket_tx_,
+                                                    &LoadBalancerMessage::HydraTunnel(tun_msg),
+                                                    &asset_name_,
+                                                )
+                                                .await
+                                                .is_err()
+                                                {
+                                                    break;
+                                                }
+                                            }
+                                        });
+
+                                        tunnel_controller = Some(tunnel_ctl);
+                                    }
+
+                                    LoadBalancerMessage::HydraKExResponse(resp)
+                                },
+                                Err(err) => LoadBalancerMessage::Error {
+                                    code: 537,
+                                    msg: format!("Hydra micropayments setup error: {err}"),
+                                },
+                            }
+                        },
+                        // Stale finalize: no pending initial KEx to match against.
+                        (Some(_), Some(_), false) => LoadBalancerMessage::Error {
+                            code: 537,
+                            msg: "Hydra micropayments setup error: no pending key exchange; please re-initiate".to_string(),
+                        },
+                        // Initial step: start a new key exchange.
+                        (Some(hydras), None, _) => {
+                            match hydras
+                                .initialize_key_exchange(asset_name, req.clone())
+                                .await
+                            {
+                                Ok(resp) => {
+                                    initial_hydra_kex = Some((req, resp.clone()));
+                                    LoadBalancerMessage::HydraKExResponse(resp)
+                                },
+                                Err(err) => LoadBalancerMessage::Error {
+                                    code: 537,
+                                    msg: format!("Hydra micropayments setup error: {err}"),
+                                },
+                            }
+                        },
+                    };
+
+                    if send_json_msg(&socket_tx, &reply, asset_name).await.is_err() {
+                        break 'event_loop;
+                    }
+                },
+
+                LBEvent::NewRelayMessage(RelayMessage::Response(response)) => {
+                    let code = response.code;
+                    let is_health_check =
+                        pass_on_response(response, &relay_state, asset_name).await;
+                    // Only bill known user requests to Hydra micropayments —
+                    // neither our own health checks, nor unknown (e.g. already
+                    // expired and cleaned-up) requests:
+                    if let Some(ctl) = &hydra_controller
+                        && (200..500).contains(&code)
+                        && is_health_check == Some(false)
+                    {
+                        ctl.account_one_request().await;
+                    }
+                },
+
+                LBEvent::NewRelayMessage(RelayMessage::Ping(ping_id)) => {
+                    if send_json_msg(&socket_tx, &LoadBalancerMessage::Pong(ping_id), asset_name)
+                        .await
+                        .is_err()
+                    {
+                        break 'event_loop;
+                    }
+                },
+
+                LBEvent::NewRelayMessage(RelayMessage::Pong(pong_id)) => {
+                    if pong_id == last_ping_id {
+                        if let Some(sent_at) = last_ping_sent_at {
+                            let network_rtt = sent_at.elapsed();
+                            *(relay_state.network_rtt.lock().await) = Some(network_rtt);
+                        }
+                        last_ping_sent_at = None;
+                    }
+                },
+
+                LBEvent::PingTick => {
+                    if let Some(_sent_at) = last_ping_sent_at {
+                        // Ping timeout:
+                        disconnection_reason = Some("ping timeout".to_string());
+                        break 'event_loop;
+                    } else {
+                        // The periodic `PingTick` loop:
+                        schedule_ping_tick();
+                        // Time to send a new ping:
+                        last_ping_id += 1;
+                        last_ping_sent_at = Some(std::time::Instant::now());
+                        if send_json_msg(
+                            &socket_tx,
+                            &LoadBalancerMessage::Ping(last_ping_id),
+                            asset_name,
+                        )
+                        .await
+                        .is_err()
+                        {
+                            break 'event_loop;
+                        }
+                    }
+                },
+            }
+        }
+
+        if let Some(ctl) = hydra_controller {
+            ctl.terminate().await
+        }
+
+        tunnel_cancellation.cancel();
+
+        let disconnection_reason_ = disconnection_reason
+            .clone()
+            .unwrap_or("reason unknown".to_string());
+
+        warn!(
+            "{}: connection event loop finished: {}",
+            asset_name.as_str(),
+            disconnection_reason_
+        );
+
+        let _ignored_failure: Result<_, _> = socket_tx
+            .send(Message::Close(disconnection_reason.map(|why| {
+                axum::extract::ws::CloseFrame {
+                    code: tungstenite::protocol::frame::coding::CloseCode::Normal.into(),
+                    reason: why.into(),
+                }
+            })))
+            .await;
+
+        // Stop ingress of new requests to this already broken connection by
+        // deleting its producer (`request_tx`) from the `LoadBalancerState`:
+        load_balancer
+            .active_relays
+            .lock()
+            .await
+            .remove(&token_state.api_prefix);
+
+        // Fail all remaining requests for this relay that possibly are still on
+        // the channel after `break 'event_loop`.
+        while let Ok(msg) = event_rx.try_recv() {
+            match msg {
+                LBEvent::NewRequest(request) => {
+                    fail_request(
+                        request,
+                        StatusCode::BAD_GATEWAY,
+                        &format!(
+                            "relay disconnected with pending requests: {disconnection_reason_}"
+                        ),
+                        asset_name,
+                    )
+                    .await;
+                },
+
+                // It’s also possible that some responses are pending, it’s best
+                // to pass them on:
+                LBEvent::NewRelayMessage(RelayMessage::Response(response)) => {
+                    pass_on_response(response, &relay_state, asset_name).await;
+                },
+
+                _ => (), // ignore any other pending event
+            }
+        }
+
+        drop(event_rx);
+
+        // Fail all in-progress requests for this relay:
+        for (_, request) in relay_state.requests_in_progress.lock().await.drain() {
+            fail_request(
+                request,
+                StatusCode::BAD_GATEWAY,
+                &format!("relay disconnected with in-progress requests: {disconnection_reason_}"),
+                asset_name,
+            )
+            .await;
+        }
+
+        // Wait for all children to finish:
+        let children = [
+            request_task,
+            finish_task,
+            response_task,
+            arbitrary_msg_task,
+            clean_up_task,
+            health_check_task,
+        ];
+        children.iter().for_each(|t| t.abort());
+        futures::future::join_all(children).await;
+
+        info!("{}: lost relay", asset_name.as_str());
+    }
+
+    /// We currently want to allow only a single connection per NFT:
+    async fn disconnect_existing_sessions_of(
+        token_state: &AccessTokenState,
+        load_balancer: &LoadBalancerState,
+    ) {
+        let mut other_do_finish_tx: Vec<mpsc::Sender<String>> = Vec::with_capacity(1);
+        load_balancer
+            .active_relays
+            .lock()
+            .await
+            .retain(|_other_api_prefix, other_relay_state| {
+                if other_relay_state.name == token_state.name {
+                    other_do_finish_tx.push(other_relay_state.do_finish.clone());
+                    false
+                } else {
+                    true
+                }
+            });
+        for chan in other_do_finish_tx.iter() {
+            let _ignored_failure: Result<_, _> = chan
+                .send(format!(
+                    "overridden by the latest {} registration with prefix {}",
+                    token_state.name.as_str(),
+                    token_state.api_prefix
+                ))
+                .await;
+        }
+    }
+
+    /// A background task to periodically remove timed-out requests from
+    /// `requests_in_progress`. It matters only for conserving memory, no other
+    /// logic depends on it.
+    async fn clean_up_expired_requests_periodically(
+        requests_in_progress: Arc<Mutex<HashMap<RequestId, RequestState>>>,
+    ) {
+        use std::time::{Duration, Instant};
+        let safety_margin = Duration::from_secs(10);
+        loop {
+            tokio::time::sleep(Duration::from_secs(60)).await;
+            let now = Instant::now();
+            requests_in_progress
+                .lock()
+                .await
+                .retain(|_, req| req.expires + safety_margin > now);
+        }
+    }
+
+    /// A little dance around the borrow checker to avoid cloning the request
+    /// for serialization.
+    fn serialize_request(
+        request: RequestState,
+    ) -> (
+        RequestState,
+        Result<serde_json::Value, serde_json::error::Error>,
+    ) {
+        let mut request = request;
+        let msg = LoadBalancerMessage::Request(request.underlying);
+        let json = serde_json::to_value(&msg);
+        let LoadBalancerMessage::Request(underlying) = msg else {
+            unreachable!()
+        };
+        request.underlying = underlying;
+        (request, json)
+    }
+
+    /// Wire HTTP requests to the connection 'event_loop:
+    async fn wire_requests(
+        event_tx: mpsc::Sender<LBEvent>,
+    ) -> (mpsc::Sender<RequestState>, JoinHandle<()>) {
+        let (tx, mut rx) = mpsc::channel(64);
+        let task = tokio::spawn(async move {
+            while let Some(msg) = rx.recv().await {
+                if event_tx.send(LBEvent::NewRequest(msg)).await.is_err() {
+                    break;
+                }
+            }
+        });
+        (tx, task)
+    }
+
+    /// Wire `do_finish` signals to the connection 'event_loop:
+    async fn wire_do_finish(
+        event_tx: mpsc::Sender<LBEvent>,
+    ) -> (mpsc::Sender<String>, JoinHandle<()>) {
+        let (tx, mut rx) = mpsc::channel(64);
+        let task = tokio::spawn(async move {
+            while let Some(msg) = rx.recv().await {
+                if event_tx.send(LBEvent::Finish(msg)).await.is_err() {
+                    break;
+                }
+            }
+        });
+        (tx, task)
+    }
+
+    /// Wire responses to the connection 'event_loop:
+    async fn wire_responses(
+        event_tx: mpsc::Sender<LBEvent>,
+        socket: WebSocket,
+        asset_name: &AssetName,
+    ) -> (mpsc::Sender<Message>, JoinHandle<()>, JoinHandle<()>) {
+        use futures_util::{sink::SinkExt, stream::StreamExt};
+        let (msg_tx, mut msg_rx) = mpsc::channel::<Message>(64);
+        let (mut sock_tx, mut sock_rx) = socket.split();
+        let asset_name_ = asset_name.clone();
+        let response_task = tokio::spawn(async move {
+            loop {
+                let msg = match sock_rx.next().await {
+                    Some(Ok(msg)) => msg,
+                    Some(Err(err)) => {
+                        warn!("{}: socket read error: {err:?}", asset_name_.as_str(),);
+                        let _ignored_failure: Result<_, _> = event_tx
+                            .send(LBEvent::Finish(format!("socket read error: {err:?}")))
+                            .await;
+                        break;
+                    },
+                    None => {
+                        let _ignored_failure: Result<_, _> = event_tx
+                            .send(LBEvent::Finish("relay disconnected".to_string()))
+                            .await;
+                        break;
+                    },
+                };
+                match msg {
+                    Message::Text(text) => {
+                        match serde_json::from_str::<RelayMessage>(&text) {
+                            Ok(msg) => {
+                                if event_tx.send(LBEvent::NewRelayMessage(msg)).await.is_err() {
+                                    break;
+                                }
+                            },
+                            Err(err) => warn!(
+                                "{}: received unparsable text message: {:?}: {:?}",
+                                asset_name_.as_str(),
+                                text,
+                                err,
+                            ),
+                        };
+                    },
+                    Message::Binary(bin) => {
+                        warn!(
+                            "{}: received unexpected binary message: {:?}",
+                            asset_name_.as_str(),
+                            hex::encode(bin),
+                        );
+                    },
+                    Message::Close(frame) => {
+                        warn!(
+                            "{}: relay disconnected (CloseFrame: {:?})",
+                            asset_name_.as_str(),
+                            frame,
+                        );
+                        let _ignored_failure: Result<_, _> = event_tx
+                            .send(LBEvent::Finish("relay disconnected".to_string()))
+                            .await;
+                        break;
+                    },
+                    Message::Ping(_) | Message::Pong(_) => {},
+                }
+            }
+        });
+        let asset_name_ = asset_name.clone();
+        let arbitrary_msg_task = tokio::spawn(async move {
+            while let Some(msg) = msg_rx.recv().await {
+                match sock_tx.send(msg).await {
+                    Ok(()) => (),
+                    Err(err) => {
+                        error!(
+                            "load balancer: {}: error when sending a message: {:?}",
+                            asset_name_.as_str(),
+                            err
+                        );
+                        // Something wrong with the socket, let’s break the 'event_loop
+                        // (eventually, by closing `msg_rx`):
+                        break;
+                    },
+                }
+            }
+        });
+        (msg_tx, response_task, arbitrary_msg_task)
+    }
+
+    /// Sends a JSON message to a WebSocket. `Err(_)` is returned when you
+    /// need to break the 'event_loop, because the connection is already broken.
+    async fn send_json_msg<J>(
+        socket_tx: &mpsc::Sender<Message>,
+        msg: &J,
+        asset_name: &AssetName,
+    ) -> Result<(), String>
+    where
+        J: ?Sized + serde::ser::Serialize,
+    {
+        match serde_json::to_string(msg) {
+            Ok(msg) => {
+                match socket_tx.send(Message::Text(msg.into())).await {
+                    Ok(_) => Ok(()),
+                    Err(err) => {
+                        error!(
+                            "{}: error when sending a Pong: {:?}",
+                            asset_name.as_str(),
+                            err
+                        );
+                        // Something wrong with the socket, let’s break the 'event_loop:
+                        Err("broken connection with the relay".to_string())
+                    },
+                }
+            },
+            Err(err) => {
+                // This branch is practically impossible, but for the sake of completeness:
+                // Let’s break 'event_loop, this seems the most elegant.
+                let err = format!(
+                    "error when serializing request to JSON (this will never happen): {err:?}"
+                );
+                error!("{}: {}", asset_name.as_str(), err);
+                Err(err)
+            },
+        }
+    }
+
+    /// Passes a WebSocket response on to the original HTTP requester. Returns
+    /// the matched request’s `is_health_check` flag, or `None` when the
+    /// request is unknown (e.g. it already timed out, and was cleaned up).
+    async fn pass_on_response(
+        response: JsonResponse,
+        relay_state: &RelayState,
+        asset_name: &AssetName,
+    ) -> Option<bool> {
+        let request_id = response.id.clone();
+
+        match relay_state
+            .requests_in_progress
+            .lock()
+            .await
+            .remove(&request_id)
+        {
+            Some(request_state) => {
+                let is_health_check = request_state.is_health_check;
+                relay_state
+                    .responses_received
+                    .fetch_add(1, atomic::Ordering::SeqCst);
+                match request_state.respond_to.send(response) {
+                    Ok(_) => (),
+                    Err(_) => warn!(
+                        "{}: received response after its request timed out: {}",
+                        asset_name.as_str(),
+                        request_id.0,
+                    ),
+                }
+                Some(is_health_check)
+            },
+            None => {
+                warn!(
+                    "{}: received supposed response for non-existent request: {}",
+                    asset_name.as_str(),
+                    response.id.0,
+                );
+                None
+            },
+        }
+    }
+
+    /// Passes a HTTP request on to a WebSocket. `Err(_)` is returned when you
+    /// need to break the 'event_loop.
+    async fn pass_on_request(
+        request: RequestState,
+        relay_state: &RelayState,
+        asset_name: &AssetName,
+        socket_tx: &mpsc::Sender<Message>,
+    ) -> Result<(), String> {
+        let request_id = request.underlying.id.clone();
+        let (request, json) = serialize_request(request);
+        relay_state
+            .requests_in_progress
+            .lock()
+            .await
+            .insert(request_id.clone(), request);
+
+        let send_result = match json {
+            Ok(msg) => send_json_msg(socket_tx, &msg, asset_name).await,
+            Err(err) => Err(format!("error when serializing request to JSON: {err:?}")), // impossible
+        };
+
+        match send_result {
+            Ok(_) => {
+                relay_state
+                    .requests_sent
+                    .fetch_add(1, atomic::Ordering::SeqCst);
+                Ok(())
+            },
+            Err(err) => {
+                let err = format!("error when sending request to relay: {err:?}");
+
+                if let Some(request) = relay_state
+                    .requests_in_progress
+                    .lock()
+                    .await
+                    .remove(&request_id)
+                {
+                    fail_request(request, StatusCode::BAD_REQUEST, &err, asset_name).await;
+                }
+
+                // break 'event_loop
+                Err(err)
+            },
+        }
+    }
+
+    /// Returns a failure to the HTTP client of a given [`RequestState`].
+    async fn fail_request(
+        request: RequestState,
+        code: StatusCode,
+        why: &str,
+        asset_name: &AssetName,
+    ) {
+        let request_id = request.underlying.id.clone();
+        error!(
+            "{}: failing request with {}: {}: {:?}",
+            asset_name.as_str(),
+            code.to_string(),
+            why,
+            request.underlying,
+        );
+        use base64::{Engine as _, engine::general_purpose};
+        let _ignored_failure: Result<_, _> = request
+            .respond_to
+            .send(JsonResponse {
+                id: request_id.clone(),
+                code: code.as_u16(),
+                header: vec![],
+                body_base64: general_purpose::STANDARD.encode(why.as_bytes()),
+            })
+            .inspect_err(|_| {
+                warn!(
+                    "{}: tried to fail a request after said request timed out: {}",
+                    asset_name.as_str(),
+                    request_id.0,
+                )
+            });
+    }
+}
+
+#[derive(Deserialize)]
+struct PlatformRootResponse {
+    version: Option<String>,
+    data_node: Option<serde::de::IgnoredAny>,
+}
+
+/// A background task to periodically check the relay’s platform over the
+/// regular websocket
+async fn check_platform_health_periodically(
+    new_request_channel: mpsc::Sender<RequestState>,
+    platform_health: Arc<Mutex<Option<PlatformHealth>>>,
+) {
+    let mut interval = tokio::time::interval(HEALTH_CHECK_INTERVAL);
+    loop {
+        interval.tick().await;
+        let health = check_platform_health(&new_request_channel).await;
+        *platform_health.lock().await = Some(health);
+    }
+}
+
+/// Sends a single `GET /` to the relay’s platform, exactly like a regular
+/// proxied HTTP request, i.e. without changing the WebSocket protocol.
+async fn check_platform_health(new_request_channel: &mpsc::Sender<RequestState>) -> PlatformHealth {
+    tokio::time::timeout(HEALTH_CHECK_TIMEOUT, async {
+        let (response_tx, response_rx) = oneshot::channel();
+
+        let request = RequestState {
+            respond_to: response_tx,
+            expires: std::time::Instant::now() + HEALTH_CHECK_TIMEOUT,
+            underlying: JsonRequest {
+                id: RequestId(Uuid::new_v4()),
+                method: JsonRequestMethod::GET,
+                path: "/".to_string(),
+                query: None,
+                header: vec![],
+                body_base64: String::new(),
+            },
+            is_health_check: true,
+        };
+
+        if new_request_channel.send(request).await.is_err() {
+            return PlatformHealth::unreachable();
+        }
+
+        match response_rx.await {
+            Ok(response) => interpret_health_response(&response),
+            Err(_) => PlatformHealth::unreachable(),
+        }
+    })
+    .await
+    .unwrap_or_else(|_timed_out| PlatformHealth::unreachable())
+}
+
+fn interpret_health_response(response: &JsonResponse) -> PlatformHealth {
+    use base64::{Engine as _, engine::general_purpose};
+
+    let body: Option<PlatformRootResponse> = general_purpose::STANDARD
+        .decode(&response.body_base64)
+        .ok()
+        .and_then(|bytes| serde_json::from_slice(&bytes).ok());
+
+    PlatformHealth {
+        healthy: response.code == 200,
+        version: body.as_ref().and_then(|b| b.version.clone()),
+        has_data_node: body.as_ref().map(|b| b.data_node.is_some()),
+    }
+}
+
+/// Converts a [`hyper::Request`] to our [`JsonRequest`] sent over the WebSocket.
+async fn request_to_json(
+    request: hyper::Request<axum::body::Body>,
+    path_override: String,
+    query_override: Option<String>,
+    relay_name: &AssetName,
+) -> Result<JsonRequest, (hyper::StatusCode, String)> {
+    use axum::http::{Method, StatusCode};
+
+    let method = (match request.method() {
+        &Method::GET => Ok(JsonRequestMethod::GET),
+        &Method::POST => Ok(JsonRequestMethod::POST),
+        other => Err((
+            StatusCode::BAD_REQUEST,
+            format!("unhandled request method: {other}"),
+        )),
+    })?;
+
+    let header: Vec<JsonHeader> = request
+        .headers()
+        .iter()
+        .flat_map(|(name, value)| {
+            value.to_str().ok().map(|value| JsonHeader {
+                name: name.to_string(),
+                value: value.to_string(),
+            })
+        })
+        .collect();
+
+    let body = request.into_body();
+    let body_bytes = axum::body::to_bytes(body, MAX_BODY_BYTES)
+        .await
+        .map_err(|err| {
+            (
+                StatusCode::BAD_REQUEST,
+                format!(
+                    "failed to read body bytes for request to {}: {}: {:?}",
+                    relay_name.as_str(),
+                    path_override,
+                    err
+                ),
+            )
+        })?;
+
+    use base64::{Engine as _, engine::general_purpose};
+    let body_base64 = general_purpose::STANDARD.encode(body_bytes);
+
+    Ok(JsonRequest {
+        id: RequestId(Uuid::new_v4()),
+        path: path_override.clone(),
+        query: query_override,
+        method,
+        body_base64,
+        header,
+    })
+}
+
+/// Converts our [`JsonResponse`] sent over the Websocket to a [`hyper::Response`].
+async fn json_to_response(
+    json: JsonResponse,
+    relay_name: &AssetName,
+) -> Result<hyper::Response<axum::body::Body>, (hyper::StatusCode, String)> {
+    use axum::body::Body;
+    use hyper::Response;
+    use hyper::StatusCode;
+
+    let body: Body = {
+        if json.body_base64.is_empty() {
+            Body::empty()
+        } else {
+            use base64::{Engine as _, engine::general_purpose};
+            let body_bytes: Vec<u8> =
+                general_purpose::STANDARD
+                    .decode(json.body_base64)
+                    .map_err(|err| {
+                        (
+                            StatusCode::BAD_GATEWAY,
+                            format!(
+                                "{}: Invalid base64 encoding of response body_base64: {}",
+                                relay_name.as_str(),
+                                err
+                            ),
+                        )
+                    })?;
+            Body::from(body_bytes)
+        }
+    };
+
+    let mut rv = Response::builder().status(StatusCode::from_u16(json.code).map_err(|err| {
+        (
+            StatusCode::BAD_GATEWAY,
+            format!(
+                "{}: Invalid response status code {}: {}",
+                relay_name.as_str(),
+                json.code,
+                err
+            ),
+        )
+    })?);
+
+    for h in json.header {
+        rv = rv.header(h.name, h.value);
+    }
+
+    rv.body(body).map_err(|err| {
+        (
+            StatusCode::BAD_REQUEST,
+            format!(
+                "{}: Error when constructing a request from JSON request: {}",
+                relay_name.as_str(),
+                err
+            ),
+        )
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_relay_state(name: &str) -> RelayState {
+        let (new_request_channel, _request_rx) = mpsc::channel(1);
+        let (do_finish, _finish_rx) = mpsc::channel(1);
+
+        RelayState {
+            name: AssetName(name.to_string()),
+            new_request_channel,
+            do_finish,
+            requests_in_progress: Arc::new(Mutex::new(HashMap::new())),
+            network_rtt: Arc::new(Mutex::new(None)),
+            connected_since: std::time::Instant::now(),
+            requests_sent: Arc::new(atomic::AtomicU64::new(0)),
+            responses_received: Arc::new(atomic::AtomicU64::new(0)),
+            platform_health: Arc::new(Mutex::new(None)),
+        }
+    }
+
+    fn test_key() -> [u8; 32] {
+        *blake3::hash(b"test-peer-secret").as_bytes()
+    }
+
+    fn encode_health_body(body: serde_json::Value) -> String {
+        use base64::{Engine as _, engine::general_purpose};
+        general_purpose::STANDARD.encode(body.to_string())
+    }
+
+    fn health_response(code: u16, body_base64: String) -> JsonResponse {
+        JsonResponse {
+            id: RequestId(Uuid::new_v4()),
+            code,
+            header: vec![],
+            body_base64,
+        }
+    }
+
+    #[test]
+    fn test_new_creates_empty_state() {
+        let lb = LoadBalancerState::new(None, test_key());
+        // active_relays starts empty (we can't check much else now)
+        assert!(lb.active_relays.blocking_lock().is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_relay_for_any_uses_sorted_uuid_round_robin() {
+        let lb = LoadBalancerState::new(None, test_key());
+        let first = Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap();
+        let second = Uuid::parse_str("00000000-0000-0000-0000-000000000002").unwrap();
+        let third = Uuid::parse_str("00000000-0000-0000-0000-000000000003").unwrap();
+
+        lb.active_relays
+            .lock()
+            .await
+            .insert(third, test_relay_state("third"));
+        lb.active_relays
+            .lock()
+            .await
+            .insert(first, test_relay_state("first"));
+        lb.active_relays
+            .lock()
+            .await
+            .insert(second, test_relay_state("second"));
+
+        assert_eq!(
+            lb.relay_for_any("/metrics").await.unwrap().1.as_str(),
+            "first"
+        );
+        assert_eq!(
+            lb.relay_for_any("/metrics").await.unwrap().1.as_str(),
+            "second"
+        );
+        assert_eq!(
+            lb.relay_for_any("/metrics").await.unwrap().1.as_str(),
+            "third"
+        );
+        assert_eq!(
+            lb.relay_for_any("/metrics").await.unwrap().1.as_str(),
+            "first"
+        );
+    }
+
+    #[test]
+    fn test_token_roundtrip() {
+        let lb = LoadBalancerState::new(None, test_key());
+        let name = AssetName("x-asset-x".to_string());
+        let prefix = Uuid::new_v4();
+        let token = lb.new_access_token(name.clone(), prefix, "addr1…");
+
+        // Any instance with the same key can verify it.
+        let state = lb.register(&token.0).expect("should verify");
+        assert_eq!(state.name, name);
+        assert_eq!(state.api_prefix, prefix);
+        assert_eq!(state.reward_addr, "addr1…");
+    }
+
+    #[test]
+    fn test_register_invalid_token() {
+        let lb = LoadBalancerState::new(None, test_key());
+        let res = lb.register("invalid");
+        assert!(matches!(res, Err(APIError::Unauthorized())));
+    }
+
+    #[test]
+    fn test_wrong_key_rejected() {
+        let key_a = *blake3::hash(b"secret-a").as_bytes();
+        let key_b = *blake3::hash(b"secret-b").as_bytes();
+        let lb_a = LoadBalancerState::new(None, key_a);
+        let lb_b = LoadBalancerState::new(None, key_b);
+        let token = lb_a.new_access_token(AssetName("a".into()), Uuid::new_v4(), "addr");
+        let res = lb_b.register(&token.0);
+        assert!(matches!(res, Err(APIError::Unauthorized())));
+    }
+
+    #[test]
+    fn test_expired_token_rejected() {
+        use base64::Engine as _;
+
+        let key = test_key();
+        let prefix = Uuid::new_v4();
+
+        // Manually create a token that is already expired.
+        let payload = KeyedTokenPayload {
+            api_prefix: prefix,
+            asset_name: "x".to_string(),
+            reward_addr: "addr".to_string(),
+            expires: 0, // epoch 0 = expired
+        };
+        let payload_json = serde_json::to_string(&payload).unwrap();
+        let payload_b64 =
+            base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(payload_json.as_bytes());
+        let hash = blake3::keyed_hash(&key, payload_b64.as_bytes());
+        let token = format!("{payload_b64}.{}", hash.to_hex());
+
+        let lb = LoadBalancerState::new(None, key);
+        let res = lb.register(&token);
+        assert!(matches!(res, Err(APIError::Unauthorized())));
+    }
+
+    #[test]
+    fn test_health_response_healthy_with_data_node() {
+        let health = interpret_health_response(&health_response(
+            200,
+            encode_health_body(serde_json::json!({
+                "name": "blockfrost-platform",
+                "version": "1.0.0",
+                "revision": "aaaaaaaa",
+                "healthy": true,
+                "node_info": null,
+                "data_node": { "available": true },
+                "errors": [],
+            })),
+        ));
+
+        assert!(health.healthy);
+        assert_eq!(health.version.as_deref(), Some("1.0.0"));
+        assert_eq!(health.has_data_node, Some(true));
+    }
+
+    #[test]
+    fn test_health_response_unhealthy_keeps_version() {
+        let health = interpret_health_response(&health_response(
+            503,
+            encode_health_body(serde_json::json!({
+                "name": "blockfrost-platform",
+                "version": "1.0.0",
+                "revision": "aaaaaaaa",
+                "healthy": false,
+                "node_info": null,
+                "errors": ["node connection lost"],
+            })),
+        ));
+
+        assert!(!health.healthy);
+        assert_eq!(health.version.as_deref(), Some("1.0.0"));
+        assert_eq!(health.has_data_node, Some(false));
+    }
+
+    #[test]
+    fn test_health_response_unparsable_body() {
+        let health = interpret_health_response(&health_response(200, "!!!".to_string()));
+
+        assert!(health.healthy);
+        assert_eq!(health.version, None);
+        assert_eq!(health.has_data_node, None);
+    }
+
+    #[tokio::test]
+    async fn test_health_check_round_trip() {
+        let (tx, mut rx) = mpsc::channel(1);
+
+        let responder = tokio::spawn(async move {
+            let request: RequestState = rx.recv().await.expect("a health-check request");
+            assert!(request.is_health_check);
+            assert_eq!(request.underlying.path, "/");
+            assert!(matches!(request.underlying.method, JsonRequestMethod::GET));
+
+            let response = JsonResponse {
+                id: request.underlying.id.clone(),
+                code: 503,
+                header: vec![],
+                body_base64: encode_health_body(serde_json::json!({
+                    "name": "blockfrost-platform",
+                    "version": "9.9.9",
+                    "revision": "aaaaaaaa",
+                    "healthy": false,
+                    "node_info": null,
+                    "errors": ["node connection lost"],
+                })),
+            };
+            request
+                .respond_to
+                .send(response)
+                .expect("health check awaits the response");
+        });
+
+        let health = check_platform_health(&tx).await;
+        responder.await.unwrap();
+
+        assert!(!health.healthy);
+        assert_eq!(health.version.as_deref(), Some("9.9.9"));
+        assert_eq!(health.has_data_node, Some(false));
+    }
+
+    #[tokio::test]
+    async fn test_health_check_unreachable_when_disconnected() {
+        let (tx, rx) = mpsc::channel(1);
+        drop(rx);
+
+        let health = check_platform_health(&tx).await;
+
+        assert!(!health.healthy);
+        assert_eq!(health.version, None);
+        assert_eq!(health.has_data_node, None);
+    }
+
+    #[tokio::test]
+    async fn test_request_to_json_keeps_query_separate() {
+        let request = hyper::Request::builder()
+            .method(hyper::Method::GET)
+            .uri("http://127.0.0.1/accounts/rewards?count=3&page=2&order=asc")
+            .body(axum::body::Body::empty())
+            .unwrap();
+
+        let json = request_to_json(
+            request,
+            "/accounts/rewards".to_string(),
+            Some("count=3&page=2&order=asc".to_string()),
+            &AssetName("x-asset-x".to_string()),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(json.path, "/accounts/rewards");
+        assert_eq!(json.query, Some("count=3&page=2&order=asc".to_string()));
+    }
+}
